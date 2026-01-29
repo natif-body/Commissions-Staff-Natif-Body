@@ -404,6 +404,34 @@
             border-top: 1px solid var(--gray-200);
         }
 
+        .commande-actions { display: flex; gap: 8px; }
+        .commande-actions .btn { padding: 6px 12px; font-size: 0.75rem; }
+
+        /* Global search */
+        .global-search-container { position: relative; flex: 1; max-width: 400px; }
+        .global-search { width: 100%; padding: 12px 16px 12px 40px; }
+        .global-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--gray-400); }
+        .search-results { position: absolute; top: 100%; left: 0; right: 0; background: white; border-radius: var(--radius); box-shadow: var(--shadow-xl); max-height: 400px; overflow-y: auto; z-index: 100; display: none; }
+        .search-results.show { display: block; }
+        .search-result-item { padding: 12px 16px; border-bottom: 1px solid var(--gray-100); cursor: pointer; transition: background 0.2s; }
+        .search-result-item:hover { background: var(--gray-50); }
+        .search-result-type { font-size: 0.7rem; text-transform: uppercase; color: var(--gray-400); margin-bottom: 4px; }
+        .search-result-title { font-weight: 600; color: var(--gray-800); }
+        .search-result-sub { font-size: 0.8rem; color: var(--gray-500); }
+
+        /* Comparison badges */
+        .comparison-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; margin-top: 4px; }
+        .comparison-up { background: #ecfdf5; color: #059669; }
+        .comparison-down { background: #fef2f2; color: #dc2626; }
+        .comparison-neutral { background: var(--gray-100); color: var(--gray-500); }
+
+        /* Points history */
+        .points-history-item { display: flex; justify-content: space-between; padding: 12px; background: var(--gray-50); border-radius: var(--radius); margin-bottom: 8px; }
+        .points-history-date { font-size: 0.8rem; color: var(--gray-500); }
+        .points-history-amount { font-weight: 700; }
+        .points-history-amount.used { color: var(--danger); }
+        .points-history-amount.earned { color: var(--success); }
+
         .commande-total { font-size: 1.1rem; font-weight: 700; }
         .commande-points { color: var(--success); font-weight: 600; }
 
@@ -629,6 +657,11 @@
                         <h1>NutriPure</h1>
                         <p>Gestion des Commissions</p>
                     </div>
+                </div>
+                <div class="global-search-container">
+                    <span class="global-search-icon">🔍</span>
+                    <input type="text" id="global-search" class="form-control global-search" placeholder="Rechercher client, produit, commande..." oninput="globalSearch()" onfocus="showSearchResults()" onblur="setTimeout(hideSearchResults, 200)">
+                    <div class="search-results" id="search-results"></div>
                 </div>
                 <nav class="tabs">
                     <button class="tab-btn active" onclick="switchTab('saisie')">Saisie</button>
@@ -951,11 +984,30 @@
                         <label>Nom *</label>
                         <input type="text" id="adherent-nom" class="form-control" placeholder="Dupont">
                     </div>
+                    <div class="form-group">
+                        <label>Date d'anniversaire</label>
+                        <input type="date" id="adherent-anniversaire" class="form-control">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('add-adherent-modal')">Annuler</button>
                 <button class="btn btn-primary" onclick="addAdherent()">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Modifier Commande -->
+    <div id="edit-commande-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Modifier la commande</h2>
+                <button class="modal-close" onclick="closeModal('edit-commande-modal')">×</button>
+            </div>
+            <div class="modal-body" id="edit-commande-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('edit-commande-modal')">Annuler</button>
+                <button class="btn btn-primary" onclick="saveEditCommande()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -1028,6 +1080,7 @@
         if (!data.adherents) data.adherents = [];
         if (!data.commandes) data.commandes = [];
         if (!data.fidelite) data.fidelite = { pointsParEuro: 1, valeurPoint: 0.05 };
+        if (!data.pointsHistory) data.pointsHistory = [];
 
         // Panier / Cart state
         let cart = { clientId: null, items: {}, step: 'client' };
@@ -1449,6 +1502,23 @@
 
         // ========== STATISTICS ==========
         function updateStats() {
+            // Get current month (guess from most recent activity)
+            const currentMonth = document.getElementById('mois-select')?.value || mois[0];
+            const currentIdx = mois.indexOf(currentMonth);
+            const prevMonth = currentIdx > 0 ? mois[currentIdx - 1] : null;
+
+            // Current month stats
+            let currentCA = 0, prevCA = 0;
+            data.coachs.forEach(c => { currentCA += calculerVentesCoach(currentMonth, c); });
+            if (prevMonth) data.coachs.forEach(c => { prevCA += calculerVentesCoach(prevMonth, c); });
+
+            const currentCommandes = data.commandes.filter(c => c.mois === currentMonth).length;
+            const prevCommandes = prevMonth ? data.commandes.filter(c => c.mois === prevMonth).length : 0;
+
+            // Comparisons
+            const caComp = prevCA > 0 ? ((currentCA - prevCA) / prevCA * 100).toFixed(1) : null;
+            const cmdComp = prevCommandes > 0 ? ((currentCommandes - prevCommandes) / prevCommandes * 100).toFixed(1) : null;
+
             // Global stats
             const totalCA = data.commandes.reduce((s, c) => s + c.total, 0);
             const totalCommandes = data.commandes.length;
@@ -1456,9 +1526,24 @@
             const totalPoints = data.adherents.reduce((s, a) => s + (a.pointsFidelite || 0), 0);
             const panierMoyen = totalCommandes > 0 ? totalCA / totalCommandes : 0;
 
+            const compBadge = (val) => {
+                if (val === null) return '';
+                const isUp = parseFloat(val) >= 0;
+                return `<div class="comparison-badge ${isUp ? 'comparison-up' : 'comparison-down'}">${isUp ? '↑' : '↓'} ${Math.abs(val)}% vs ${prevMonth}</div>`;
+            };
+
             document.getElementById('global-stats').innerHTML = `
-                <div class="stat-card highlight"><div class="stat-value">${totalCA.toFixed(0)}€</div><div class="stat-label">CA Total</div></div>
-                <div class="stat-card"><div class="stat-value">${totalCommandes}</div><div class="stat-label">Commandes</div></div>
+                <div class="stat-card highlight">
+                    <div class="stat-value">${currentCA.toFixed(0)}€</div>
+                    <div class="stat-label">CA ${currentMonth}</div>
+                    ${compBadge(caComp)}
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${currentCommandes}</div>
+                    <div class="stat-label">Commandes ${currentMonth}</div>
+                    ${compBadge(cmdComp)}
+                </div>
+                <div class="stat-card"><div class="stat-value">${totalCA.toFixed(0)}€</div><div class="stat-label">CA Total</div></div>
                 <div class="stat-card"><div class="stat-value">${totalClients}</div><div class="stat-label">Clients</div></div>
                 <div class="stat-card"><div class="stat-value">${panierMoyen.toFixed(2)}€</div><div class="stat-label">Panier Moyen</div></div>
                 <div class="stat-card"><div class="stat-value">${totalPoints}</div><div class="stat-label">Points Fidélité</div></div>
@@ -1580,13 +1665,15 @@
                 const totalAchats = getAdherentTotalAchats(adherent.id);
                 const nbCommandes = getAdherentNbCommandes(adherent.id);
                 const favoris = getAdherentFavoris(adherent.id);
+                const hasBirthday = adherent.dateAnniversaire;
+                const isBirthdayToday = hasBirthday && adherent.dateAnniversaire.substring(5) === `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
 
                 return `
                     <div class="adherent-card" onclick="showFicheAdherent('${adherent.id}')">
                         <div class="adherent-header">
                             <div>
-                                <div class="adherent-name">${adherent.prenom} ${adherent.nom}</div>
-                                <div class="adherent-date">Depuis ${adherent.dateInscription}</div>
+                                <div class="adherent-name">${adherent.prenom} ${adherent.nom} ${isBirthdayToday ? '🎂' : ''}</div>
+                                <div class="adherent-date">Depuis ${adherent.dateInscription} ${hasBirthday ? '| 🎂 ' + new Date(adherent.dateAnniversaire).toLocaleDateString('fr-FR', {day: 'numeric', month: 'short'}) : ''}</div>
                             </div>
                             <span class="fidelite-badge ${badge.class}">${badge.label}</span>
                         </div>
@@ -1610,12 +1697,14 @@
         function addAdherent() {
             const prenom = document.getElementById('adherent-prenom').value.trim();
             const nom = document.getElementById('adherent-nom').value.trim();
+            const anniversaire = document.getElementById('adherent-anniversaire').value;
             if (!prenom || !nom) { alert('Remplissez prénom et nom'); return; }
 
             const newAdherent = {
                 id: generateId(),
                 prenom, nom,
                 dateInscription: new Date().toISOString().split('T')[0],
+                dateAnniversaire: anniversaire || null,
                 pointsFidelite: 0
             };
             data.adherents.push(newAdherent);
@@ -1639,6 +1728,9 @@
             const commandes = data.commandes.filter(c => c.adherentId === adherentId).sort((a, b) => new Date(b.date) - new Date(a.date));
 
             document.getElementById('fiche-adherent-title').textContent = `${adherent.prenom} ${adherent.nom}`;
+            const pointsHist = getPointsHistory(adherentId);
+            const birthdayDisplay = adherent.dateAnniversaire ? new Date(adherent.dateAnniversaire).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : 'Non renseigné';
+
             document.getElementById('fiche-adherent-content').innerHTML = `
                 <div class="points-display">
                     <div class="points-label">Points de fidélité</div>
@@ -1650,6 +1742,7 @@
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-value">${totalAchats.toFixed(2)}€</div><div class="stat-label">Total achats</div></div>
                     <div class="stat-card"><div class="stat-value">${nbCommandes}</div><div class="stat-label">Commandes</div></div>
+                    <div class="stat-card"><div class="stat-value">🎂</div><div class="stat-label">${birthdayDisplay}</div></div>
                 </div>
 
                 ${points > 0 ? `<button class="btn btn-success" style="width:100%;margin-bottom:20px;" onclick="showUsePointsModal('${adherentId}')">Utiliser mes points</button>` : ''}
@@ -1659,7 +1752,26 @@
                     ${favoris.length > 0 ? favoris.map(f => `<span class="favori-tag">${f}</span>`).join('') : '<span style="color:var(--gray-500);">Pas encore de favoris</span>'}
                 </div>
 
-                <h3 style="margin:20px 0 10px;color:var(--gray-800);">Historique</h3>
+                ${pointsHist.length > 0 ? `
+                    <h3 style="margin:20px 0 10px;color:var(--gray-800);">Historique des Points</h3>
+                    <div style="margin-bottom:20px;">
+                        ${pointsHist.slice(0, 10).map(h => `
+                            <div class="points-history-item">
+                                <div>
+                                    <span class="points-history-amount ${h.type === 'used' ? 'used' : 'earned'}">
+                                        ${h.type === 'used' ? '-' : '+'}${h.points} pts
+                                    </span>
+                                    <span style="color:var(--gray-500);margin-left:8px;">
+                                        ${h.type === 'used' ? 'Utilisés' : h.type === 'birthday' ? '🎂 Anniversaire' : 'Gagnés'}
+                                    </span>
+                                </div>
+                                <span class="points-history-date">${h.date}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+
+                <h3 style="margin:20px 0 10px;color:var(--gray-800);">Historique Commandes</h3>
                 ${commandes.length > 0 ? commandes.slice(0, 10).map(c => `
                     <div class="commande-card">
                         <div class="commande-header">
@@ -1715,6 +1827,18 @@
             if (pts <= 0 || pts > adherent.pointsFidelite) { alert('Nombre invalide'); return; }
 
             adherent.pointsFidelite -= pts;
+
+            // Historique des points
+            if (!data.pointsHistory) data.pointsHistory = [];
+            data.pointsHistory.push({
+                id: generateId(),
+                adherentId,
+                type: 'used',
+                points: pts,
+                valeur: pts * data.fidelite.valeurPoint,
+                date: new Date().toISOString().split('T')[0]
+            });
+
             saveData();
             closeModal('use-points-modal');
             showFicheAdherent(adherentId);
@@ -1770,6 +1894,10 @@
                             <span class="commande-date">${c.date} - ${c.mois}</span>
                             <span class="commande-client">${name}</span>
                             <span class="commande-coach">Coach: ${c.coach}</span>
+                            <div class="commande-actions">
+                                <button class="btn btn-secondary" onclick="editCommande('${c.id}')">✏️ Modifier</button>
+                                <button class="btn btn-danger" onclick="deleteCommande('${c.id}')">🗑️ Supprimer</button>
+                            </div>
                         </div>
                         <div class="commande-produits">
                             ${c.produits.map(p => `<div class="commande-produit-row"><span>${p.quantite}x ${p.nom}</span><span>${(p.quantite * p.prixUnitaire).toFixed(2)}€</span></div>`).join('')}
@@ -1964,7 +2092,269 @@
         document.addEventListener('DOMContentLoaded', () => {
             const pms = document.getElementById('price-month-select');
             if (pms) pms.addEventListener('change', updatePriceList);
+            checkBirthdays();
         });
+
+        // ========== EDIT/DELETE COMMANDES ==========
+        let editingCommandeId = null;
+
+        function editCommande(commandeId) {
+            const commande = data.commandes.find(c => c.id === commandeId);
+            if (!commande) return;
+            editingCommandeId = commandeId;
+
+            const adherent = data.adherents.find(a => a.id === commande.adherentId);
+            const clientName = adherent ? `${adherent.prenom} ${adherent.nom}` : 'Client supprimé';
+
+            document.getElementById('edit-commande-content').innerHTML = `
+                <div class="alert alert-info">Client: <strong>${clientName}</strong> | Date: ${commande.date}</div>
+                <div class="form-grid" style="margin-bottom: 16px;">
+                    <div class="form-group">
+                        <label>Coach</label>
+                        <select id="edit-commande-coach" class="form-control">
+                            ${data.coachs.map(c => `<option value="${c}" ${c === commande.coach ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Mois</label>
+                        <select id="edit-commande-mois" class="form-control">
+                            ${mois.map(m => `<option value="${m}" ${m === commande.mois ? 'selected' : ''}>${m}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <h4 style="margin-bottom: 12px;">Produits</h4>
+                <div id="edit-commande-produits">
+                    ${commande.produits.map((p, i) => `
+                        <div class="item-row" style="margin-bottom: 8px;">
+                            <div class="item-info">
+                                <strong>${p.nom}</strong>
+                                <small>${p.prixUnitaire.toFixed(2)}€/u</small>
+                            </div>
+                            <div class="item-actions">
+                                <input type="number" class="quantity-input" id="edit-qty-${i}" value="${p.quantite}" min="0" style="width:60px;">
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            document.getElementById('edit-commande-modal').classList.add('show');
+        }
+
+        function saveEditCommande() {
+            if (!editingCommandeId) return;
+            const commande = data.commandes.find(c => c.id === editingCommandeId);
+            if (!commande) return;
+
+            const oldCoach = commande.coach;
+            const oldMois = commande.mois;
+            const oldProduits = [...commande.produits];
+
+            commande.coach = document.getElementById('edit-commande-coach').value;
+            commande.mois = document.getElementById('edit-commande-mois').value;
+
+            // Update quantities
+            let newTotal = 0;
+            commande.produits.forEach((p, i) => {
+                const newQty = parseInt(document.getElementById(`edit-qty-${i}`).value) || 0;
+                const oldQty = oldProduits[i].quantite;
+
+                // Update ventes
+                if (data.ventes[oldMois]?.[oldCoach]) {
+                    data.ventes[oldMois][oldCoach][p.nom] = (data.ventes[oldMois][oldCoach][p.nom] || 0) - oldQty;
+                }
+                if (!data.ventes[commande.mois]) data.ventes[commande.mois] = {};
+                if (!data.ventes[commande.mois][commande.coach]) data.ventes[commande.mois][commande.coach] = {};
+                data.ventes[commande.mois][commande.coach][p.nom] = (data.ventes[commande.mois][commande.coach][p.nom] || 0) + newQty;
+
+                p.quantite = newQty;
+                newTotal += p.quantite * p.prixUnitaire;
+            });
+
+            // Remove products with 0 quantity
+            commande.produits = commande.produits.filter(p => p.quantite > 0);
+
+            // Update points
+            const oldPoints = commande.pointsGagnes;
+            const newPoints = Math.floor(newTotal * data.fidelite.pointsParEuro);
+            const pointsDiff = newPoints - oldPoints;
+
+            const adherent = data.adherents.find(a => a.id === commande.adherentId);
+            if (adherent) adherent.pointsFidelite = (adherent.pointsFidelite || 0) + pointsDiff;
+
+            commande.total = newTotal;
+            commande.pointsGagnes = newPoints;
+
+            saveData();
+            closeModal('edit-commande-modal');
+            editingCommandeId = null;
+            filterCommandes();
+            alert('Commande modifiée !');
+        }
+
+        function deleteCommande(commandeId) {
+            if (!confirm('Supprimer cette commande ? Les points seront retirés au client.')) return;
+
+            const commande = data.commandes.find(c => c.id === commandeId);
+            if (!commande) return;
+
+            // Remove from ventes
+            commande.produits.forEach(p => {
+                if (data.ventes[commande.mois]?.[commande.coach]) {
+                    data.ventes[commande.mois][commande.coach][p.nom] = Math.max(0, (data.ventes[commande.mois][commande.coach][p.nom] || 0) - p.quantite);
+                }
+            });
+
+            // Remove points from adherent
+            const adherent = data.adherents.find(a => a.id === commande.adherentId);
+            if (adherent) adherent.pointsFidelite = Math.max(0, (adherent.pointsFidelite || 0) - commande.pointsGagnes);
+
+            data.commandes = data.commandes.filter(c => c.id !== commandeId);
+            saveData();
+            filterCommandes();
+            alert('Commande supprimée');
+        }
+
+        // ========== GLOBAL SEARCH ==========
+        function globalSearch() {
+            const query = document.getElementById('global-search').value.toLowerCase().trim();
+            const results = document.getElementById('search-results');
+
+            if (query.length < 2) { results.innerHTML = ''; results.classList.remove('show'); return; }
+
+            let html = '';
+
+            // Search clients
+            const clients = data.adherents.filter(a =>
+                a.prenom.toLowerCase().includes(query) || a.nom.toLowerCase().includes(query)
+            ).slice(0, 5);
+            clients.forEach(c => {
+                html += `<div class="search-result-item" onclick="goToClient('${c.id}')">
+                    <div class="search-result-type">👤 Client</div>
+                    <div class="search-result-title">${c.prenom} ${c.nom}</div>
+                    <div class="search-result-sub">${c.pointsFidelite || 0} points</div>
+                </div>`;
+            });
+
+            // Search products
+            const products = data.produits.filter(p => p.nom.toLowerCase().includes(query)).slice(0, 5);
+            products.forEach(p => {
+                html += `<div class="search-result-item" onclick="goToProduct('${p.nom.replace(/'/g, "\\'")}')">
+                    <div class="search-result-type">📦 Produit</div>
+                    <div class="search-result-title">${p.nom}</div>
+                    <div class="search-result-sub">${p.prixBase.toFixed(2)}€</div>
+                </div>`;
+            });
+
+            // Search commandes
+            const commandes = data.commandes.filter(c => {
+                const adherent = data.adherents.find(a => a.id === c.adherentId);
+                const name = adherent ? `${adherent.prenom} ${adherent.nom}`.toLowerCase() : '';
+                return name.includes(query) || c.coach.toLowerCase().includes(query) || c.produits.some(p => p.nom.toLowerCase().includes(query));
+            }).slice(0, 5);
+            commandes.forEach(c => {
+                const adherent = data.adherents.find(a => a.id === c.adherentId);
+                const name = adherent ? `${adherent.prenom} ${adherent.nom}` : 'Client supprimé';
+                html += `<div class="search-result-item" onclick="goToCommande()">
+                    <div class="search-result-type">🧾 Commande</div>
+                    <div class="search-result-title">${name} - ${c.date}</div>
+                    <div class="search-result-sub">${c.total.toFixed(2)}€ | ${c.coach}</div>
+                </div>`;
+            });
+
+            results.innerHTML = html || '<div class="search-result-item"><div class="search-result-sub">Aucun résultat</div></div>';
+            results.classList.add('show');
+        }
+
+        function showSearchResults() {
+            const query = document.getElementById('global-search').value;
+            if (query.length >= 2) document.getElementById('search-results').classList.add('show');
+        }
+
+        function hideSearchResults() { document.getElementById('search-results').classList.remove('show'); }
+
+        function goToClient(id) {
+            hideSearchResults();
+            document.getElementById('global-search').value = '';
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-btn')[3].classList.add('active');
+            ['saisie', 'dashboard', 'stats', 'adherents', 'commandes', 'settings'].forEach(t => document.getElementById(t + '-view').classList.add('hidden'));
+            document.getElementById('adherents-view').classList.remove('hidden');
+            updateAdherentsView();
+            showFicheAdherent(id);
+        }
+
+        function goToProduct(nom) {
+            hideSearchResults();
+            document.getElementById('global-search').value = '';
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            ['saisie', 'dashboard', 'stats', 'adherents', 'commandes', 'settings'].forEach(t => document.getElementById(t + '-view').classList.add('hidden'));
+            document.getElementById('saisie-view').classList.remove('hidden');
+            document.getElementById('search-input').value = nom;
+            updateView();
+        }
+
+        function goToCommande() {
+            hideSearchResults();
+            document.getElementById('global-search').value = '';
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-btn')[4].classList.add('active');
+            ['saisie', 'dashboard', 'stats', 'adherents', 'commandes', 'settings'].forEach(t => document.getElementById(t + '-view').classList.add('hidden'));
+            document.getElementById('commandes-view').classList.remove('hidden');
+            updateCommandesView();
+        }
+
+        // ========== MONTH COMPARISON ==========
+        function getMonthComparison(currentMonth, value, type = 'ventes') {
+            const currentIdx = mois.indexOf(currentMonth);
+            if (currentIdx <= 0) return null;
+            const prevMonth = mois[currentIdx - 1];
+
+            let prevValue = 0;
+            if (type === 'ventes') {
+                data.coachs.forEach(c => { prevValue += calculerVentesCoach(prevMonth, c); });
+            } else if (type === 'commandes') {
+                prevValue = data.commandes.filter(c => c.mois === prevMonth).length;
+            }
+
+            if (prevValue === 0) return null;
+            const diff = ((value - prevValue) / prevValue) * 100;
+            return { diff: diff.toFixed(1), isUp: diff >= 0 };
+        }
+
+        // ========== BIRTHDAY CHECK ==========
+        function checkBirthdays() {
+            const today = new Date();
+            const todayStr = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+            data.adherents.forEach(a => {
+                if (a.dateAnniversaire) {
+                    const annivStr = a.dateAnniversaire.substring(5); // MM-DD
+                    if (annivStr === todayStr && !a.lastBirthdayBonus?.startsWith(today.getFullYear().toString())) {
+                        const bonusPoints = 50;
+                        a.pointsFidelite = (a.pointsFidelite || 0) + bonusPoints;
+                        a.lastBirthdayBonus = today.toISOString().split('T')[0];
+
+                        if (!data.pointsHistory) data.pointsHistory = [];
+                        data.pointsHistory.push({
+                            id: generateId(),
+                            adherentId: a.id,
+                            type: 'birthday',
+                            points: bonusPoints,
+                            date: today.toISOString().split('T')[0]
+                        });
+
+                        saveData();
+                        alert(`🎂 Joyeux anniversaire ${a.prenom} ! +${bonusPoints} points bonus offerts !`);
+                    }
+                }
+            });
+        }
+
+        function getPointsHistory(adherentId) {
+            if (!data.pointsHistory) return [];
+            return data.pointsHistory.filter(h => h.adherentId === adherentId).sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
 
         window.onclick = e => { if (e.target.classList.contains('modal')) e.target.classList.remove('show'); };
 
