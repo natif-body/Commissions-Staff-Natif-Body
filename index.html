@@ -456,6 +456,31 @@
         .stock-alert-list { font-size: 0.85rem; color: var(--gray-600); }
         .stock-toggle { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; }
 
+        /* Manager space */
+        .manager-login-btn { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; }
+        .manager-card { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 24px; border-radius: var(--radius-lg); margin-bottom: 20px; }
+        .manager-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+        .manager-stat { background: rgba(255,255,255,0.1); padding: 20px; border-radius: var(--radius); text-align: center; }
+        .manager-stat-value { font-size: 2rem; font-weight: 800; }
+        .manager-stat-label { font-size: 0.75rem; text-transform: uppercase; opacity: 0.8; }
+        .manager-stat.profit .manager-stat-value { color: #10b981; }
+        .manager-stat.cost .manager-stat-value { color: #f59e0b; }
+        .manager-stat.revenue .manager-stat-value { color: #3b82f6; }
+        .profit-positive { color: #10b981 !important; }
+        .profit-negative { color: #ef4444 !important; }
+        .import-zone { border: 3px dashed var(--gray-300); border-radius: var(--radius-lg); padding: 40px; text-align: center; margin-bottom: 20px; transition: all 0.2s; }
+        .import-zone:hover { border-color: var(--primary); background: rgba(227, 30, 36, 0.05); }
+        .import-zone-icon { font-size: 3rem; margin-bottom: 16px; }
+        .import-zone-text { color: var(--gray-500); margin-bottom: 16px; }
+        .order-import-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--gray-50); border-radius: var(--radius); margin-bottom: 8px; }
+        .order-import-name { font-weight: 600; flex: 1; }
+        .order-import-qty { width: 80px; text-align: center; }
+        .order-import-price { width: 100px; text-align: right; color: var(--gray-500); }
+        .margin-indicator { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+        .margin-good { background: #ecfdf5; color: #059669; }
+        .margin-medium { background: #fffbeb; color: #d97706; }
+        .margin-low { background: #fef2f2; color: #dc2626; }
+
         .commande-total { font-size: 1.1rem; font-weight: 700; }
         .commande-points { color: var(--success); font-weight: 600; }
 
@@ -694,7 +719,9 @@
                     <button class="tab-btn" onclick="switchTab('adherents')">Adhérents</button>
                     <button class="tab-btn" onclick="switchTab('commandes')">Commandes</button>
                     <button class="tab-btn" onclick="switchTab('settings')">Paramètres</button>
+                    <button class="tab-btn hidden" id="manager-tab" onclick="switchTab('manager')">🔐 Gérant</button>
                 </nav>
+                <button class="btn manager-login-btn" onclick="showManagerLogin()" id="manager-login-btn">🔐 Espace Gérant</button>
             </div>
         </header>
 
@@ -936,6 +963,121 @@
                     </div>
                 </div>
                 <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" onclick="resetAllStock()">Remettre tout le stock à 0</button>
+            </div>
+        </div>
+    </div>
+
+        <!-- Vue Gérant (protégée) -->
+        <div id="manager-view" class="hidden">
+            <div class="manager-card">
+                <h2 style="margin-bottom: 20px;">🔐 Espace Gérant - Thomas</h2>
+                <div class="manager-stat-grid">
+                    <div class="manager-stat revenue">
+                        <div class="manager-stat-value" id="manager-revenue">0€</div>
+                        <div class="manager-stat-label">Chiffre d'affaires</div>
+                    </div>
+                    <div class="manager-stat cost">
+                        <div class="manager-stat-value" id="manager-costs">0€</div>
+                        <div class="manager-stat-label">Coût d'achat</div>
+                    </div>
+                    <div class="manager-stat profit">
+                        <div class="manager-stat-value" id="manager-profit">0€</div>
+                        <div class="manager-stat-label">Bénéfice net</div>
+                    </div>
+                    <div class="manager-stat">
+                        <div class="manager-stat-value" id="manager-margin">0%</div>
+                        <div class="manager-stat-label">Marge moyenne</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📥</div> Importer Commande Fournisseur</div>
+                </div>
+                <div class="alert alert-info">
+                    Collez le contenu de votre commande Nutripure (copiez depuis le PDF) pour mettre à jour le stock et les coûts d'achat.
+                </div>
+                <div class="import-zone" onclick="document.getElementById('import-order-text').focus()">
+                    <div class="import-zone-icon">📋</div>
+                    <div class="import-zone-text">Collez le texte de votre commande ici</div>
+                    <textarea id="import-order-text" class="form-control" rows="6" placeholder="Collez le contenu copié depuis le PDF de commande Nutripure..."></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="parseSupplierOrder()">Analyser la commande</button>
+                <div id="parsed-order-preview" class="hidden" style="margin-top: 20px;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📦</div> Historique des Commandes Fournisseur</div>
+                </div>
+                <div id="supplier-orders-list"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">💰</div> Marges par Produit</div>
+                </div>
+                <div class="table-container">
+                    <table id="margins-table">
+                        <tr>
+                            <th>Produit</th>
+                            <th>Prix d'achat</th>
+                            <th>Prix de vente</th>
+                            <th>Marge</th>
+                            <th>Vendus</th>
+                            <th>Bénéfice</th>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">👥</div> Performance des Coachs</div>
+                </div>
+                <div class="table-container">
+                    <table id="coach-performance-table">
+                        <tr>
+                            <th>Coach</th>
+                            <th>Ventes</th>
+                            <th>Commission</th>
+                            <th>Bénéfice généré</th>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">⚙️</div> Configuration Prix d'Achat</div>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <input type="text" id="purchase-price-search" class="form-control" placeholder="Rechercher un produit..." oninput="filterPurchasePrices()">
+                </div>
+                <div class="item-list" id="purchase-prices-list" style="max-height: 400px;"></div>
+            </div>
+
+            <button class="btn btn-danger" onclick="logoutManager()" style="margin-top: 20px;">🚪 Déconnexion</button>
+        </div>
+    </div>
+
+    <!-- Modal Login Gérant -->
+    <div id="manager-login-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔐 Espace Gérant</h2>
+                <button class="modal-close" onclick="closeModal('manager-login-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="manager-password" class="form-control" placeholder="Entrez le mot de passe" onkeypress="if(event.key==='Enter')loginManager()">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('manager-login-modal')">Annuler</button>
+                <button class="btn btn-primary" onclick="loginManager()">Connexion</button>
             </div>
         </div>
     </div>
@@ -1188,6 +1330,9 @@
         }
         if (!data.stockHistory) data.stockHistory = [];
         if (!data.stockAlertThreshold) data.stockAlertThreshold = 3;
+        if (!data.prixAchat) data.prixAchat = {};
+        if (!data.commandesFournisseur) data.commandesFournisseur = [];
+        if (!data.managerPassword) data.managerPassword = 'thomas2024'; // Default password
 
         // Panier / Cart state
         let cart = { clientId: null, items: {}, step: 'client' };
@@ -1273,10 +1418,11 @@
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (event && event.target) event.target.classList.add('active');
 
-            ['saisie', 'dashboard', 'stats', 'adherents', 'commandes', 'settings'].forEach(t => {
-                document.getElementById(t + '-view').classList.add('hidden');
+            ['saisie', 'dashboard', 'stats', 'adherents', 'commandes', 'settings', 'manager'].forEach(t => {
+                const el = document.getElementById(t + '-view');
+                if (el) el.classList.add('hidden');
             });
 
             document.getElementById(tab + '-view').classList.remove('hidden');
@@ -1287,6 +1433,7 @@
             else if (tab === 'adherents') updateAdherentsView();
             else if (tab === 'commandes') updateCommandesView();
             else if (tab === 'settings') updateSettings();
+            else if (tab === 'manager') updateManagerView();
         }
 
         function updateView() {
@@ -2702,6 +2849,468 @@
                 ` : '<p style="text-align:center;color:var(--gray-500);">Aucun historique</p>'}
             `;
             document.getElementById('stock-history-modal').classList.add('show');
+        }
+
+        // ========== MANAGER SPACE ==========
+        let isManagerLoggedIn = false;
+        let parsedOrderData = null;
+
+        function showManagerLogin() {
+            document.getElementById('manager-password').value = '';
+            document.getElementById('manager-login-modal').classList.add('show');
+        }
+
+        function loginManager() {
+            const password = document.getElementById('manager-password').value;
+            if (password === data.managerPassword) {
+                isManagerLoggedIn = true;
+                closeModal('manager-login-modal');
+                document.getElementById('manager-tab').classList.remove('hidden');
+                document.getElementById('manager-login-btn').classList.add('hidden');
+                switchTab('manager');
+                document.getElementById('manager-tab').classList.add('active');
+            } else {
+                alert('Mot de passe incorrect');
+            }
+        }
+
+        function logoutManager() {
+            isManagerLoggedIn = false;
+            document.getElementById('manager-tab').classList.add('hidden');
+            document.getElementById('manager-login-btn').classList.remove('hidden');
+            switchTab('saisie');
+            document.querySelector('.tab-btn').classList.add('active');
+        }
+
+        function updateManagerView() {
+            if (!isManagerLoggedIn) return;
+
+            // Calculate totals
+            const totalRevenue = data.commandes.reduce((sum, c) => sum + c.total, 0);
+
+            let totalCosts = 0;
+            let totalProfit = 0;
+            const productStats = {};
+
+            data.commandes.forEach(c => {
+                c.produits.forEach(p => {
+                    const prixAchat = data.prixAchat[p.nom] || 0;
+                    const cost = prixAchat * p.quantite;
+                    const revenue = p.prixUnitaire * p.quantite;
+                    totalCosts += cost;
+
+                    if (!productStats[p.nom]) {
+                        productStats[p.nom] = { sold: 0, revenue: 0, cost: 0 };
+                    }
+                    productStats[p.nom].sold += p.quantite;
+                    productStats[p.nom].revenue += revenue;
+                    productStats[p.nom].cost += cost;
+                });
+            });
+
+            // Add supplier order costs
+            const supplierCosts = data.commandesFournisseur.reduce((sum, o) => sum + o.totalHT, 0);
+
+            totalProfit = totalRevenue - totalCosts;
+            const margin = totalRevenue > 0 ? (totalProfit / totalRevenue * 100) : 0;
+
+            document.getElementById('manager-revenue').textContent = totalRevenue.toFixed(2) + '€';
+            document.getElementById('manager-costs').textContent = totalCosts.toFixed(2) + '€';
+            document.getElementById('manager-profit').textContent = totalProfit.toFixed(2) + '€';
+            document.getElementById('manager-profit').className = `manager-stat-value ${totalProfit >= 0 ? 'profit-positive' : 'profit-negative'}`;
+            document.getElementById('manager-margin').textContent = margin.toFixed(1) + '%';
+
+            // Margins table
+            const marginsTable = document.getElementById('margins-table');
+            let marginsHtml = '<tr><th>Produit</th><th>Prix achat</th><th>Prix vente</th><th>Marge</th><th>Vendus</th><th>Bénéfice</th></tr>';
+
+            Object.entries(productStats).sort((a, b) => b[1].revenue - a[1].revenue).forEach(([nom, stats]) => {
+                const prixAchat = data.prixAchat[nom] || 0;
+                const prixVente = data.produits.find(p => p.nom === nom)?.prixBase || 0;
+                const margeUnit = prixVente > 0 ? ((prixVente - prixAchat) / prixVente * 100) : 0;
+                const profit = stats.revenue - stats.cost;
+                const margeClass = margeUnit >= 30 ? 'margin-good' : margeUnit >= 15 ? 'margin-medium' : 'margin-low';
+
+                marginsHtml += `
+                    <tr>
+                        <td><strong>${nom.substring(0, 30)}${nom.length > 30 ? '...' : ''}</strong></td>
+                        <td>${prixAchat > 0 ? prixAchat.toFixed(2) + '€' : '<em style="color:var(--gray-400)">Non défini</em>'}</td>
+                        <td>${prixVente.toFixed(2)}€</td>
+                        <td><span class="margin-indicator ${margeClass}">${margeUnit.toFixed(1)}%</span></td>
+                        <td>${stats.sold}</td>
+                        <td style="font-weight:700;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit.toFixed(2)}€</td>
+                    </tr>
+                `;
+            });
+            marginsTable.innerHTML = marginsHtml;
+
+            // Coach performance
+            const coachTable = document.getElementById('coach-performance-table');
+            let coachHtml = '<tr><th>Coach</th><th>Ventes</th><th>Commission</th><th>Bénéfice généré</th></tr>';
+
+            data.coachs.forEach(coach => {
+                let coachVentes = 0;
+                let coachProfit = 0;
+
+                mois.forEach(m => {
+                    coachVentes += calculerVentesCoach(m, coach);
+                });
+
+                data.commandes.filter(c => c.coach === coach).forEach(c => {
+                    c.produits.forEach(p => {
+                        const prixAchat = data.prixAchat[p.nom] || 0;
+                        coachProfit += (p.prixUnitaire - prixAchat) * p.quantite;
+                    });
+                });
+
+                const commission = calculerCommission(coachVentes);
+
+                coachHtml += `
+                    <tr>
+                        <td><strong>${coach}</strong></td>
+                        <td>${coachVentes.toFixed(2)}€</td>
+                        <td>${commission.toFixed(2)}€</td>
+                        <td style="font-weight:700;color:var(--success);">${coachProfit.toFixed(2)}€</td>
+                    </tr>
+                `;
+            });
+            coachTable.innerHTML = coachHtml;
+
+            // Supplier orders list
+            updateSupplierOrdersList();
+
+            // Purchase prices
+            filterPurchasePrices();
+        }
+
+        function filterPurchasePrices() {
+            const search = (document.getElementById('purchase-price-search')?.value || '').toLowerCase();
+            const filtered = data.produits.filter(p => p.nom.toLowerCase().includes(search));
+
+            document.getElementById('purchase-prices-list').innerHTML = filtered.map(p => {
+                const prixAchat = data.prixAchat[p.nom] || 0;
+                return `
+                    <div class="item-row">
+                        <div class="item-info">
+                            <strong>${p.nom}</strong>
+                            <small>Vente: ${p.prixBase.toFixed(2)}€ | Achat: ${prixAchat > 0 ? prixAchat.toFixed(2) + '€' : 'Non défini'}</small>
+                        </div>
+                        <div class="item-actions">
+                            <input type="number" class="price-input" id="purchase-${p.nom.replace(/[^a-zA-Z0-9]/g, '_')}" value="${prixAchat || ''}" step="0.01" min="0" placeholder="Prix achat">
+                            <button class="btn btn-primary btn-sm" onclick="savePurchasePrice('${p.nom.replace(/'/g, "\\'")}')">OK</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function savePurchasePrice(productName) {
+            const inputId = `purchase-${productName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const price = parseFloat(input.value) || 0;
+            data.prixAchat[productName] = price;
+            saveData();
+            updateManagerView();
+        }
+
+        function parseSupplierOrder() {
+            const text = document.getElementById('import-order-text').value;
+            if (!text.trim()) { alert('Collez d\'abord le texte de la commande'); return; }
+
+            // Parse the text - looking for product lines
+            const lines = text.split('\n').filter(l => l.trim());
+            const products = [];
+            let totalHT = 0;
+
+            // Regex patterns to extract data
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                // Look for lines with prices (containing € symbol)
+                if (line.includes('€')) {
+                    // Try to extract: Reference, Product name, Tax, Base price, Unit price, Qty, Total
+                    const priceMatches = line.match(/(\d+[,.]?\d*)\s*€/g);
+                    if (priceMatches && priceMatches.length >= 2) {
+                        // Extract quantity - look for standalone number
+                        const qtyMatch = line.match(/\s(\d+)\s*$/);
+                        const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
+                        // Try to get product name from previous line or current line
+                        let productName = '';
+                        const refMatch = line.match(/^([A-Z_0-9]+)\s+(.+?)\s+\d/);
+                        if (refMatch) {
+                            productName = refMatch[2].trim();
+                        } else {
+                            // Check previous line for product name
+                            if (i > 0 && !lines[i-1].includes('€')) {
+                                productName = lines[i-1].trim();
+                            }
+                        }
+
+                        // Get unit price (usually second-to-last price before quantity)
+                        const prices = priceMatches.map(p => parseFloat(p.replace('€', '').replace(',', '.').trim()));
+                        const unitPrice = prices.length >= 2 ? prices[prices.length - 2] : prices[0];
+                        const lineTotal = prices[prices.length - 1];
+
+                        if (productName && unitPrice) {
+                            products.push({
+                                reference: refMatch ? refMatch[1] : '',
+                                nom: productName,
+                                prixUnitaireHT: unitPrice,
+                                quantite: qty,
+                                totalHT: lineTotal || (unitPrice * qty)
+                            });
+                            totalHT += lineTotal || (unitPrice * qty);
+                        }
+                    }
+                }
+            }
+
+            if (products.length === 0) {
+                // Fallback: try simpler parsing
+                alert('Format non reconnu automatiquement. Utilisez le formulaire manuel ci-dessous.');
+                showManualOrderEntry();
+                return;
+            }
+
+            parsedOrderData = { products, totalHT, date: new Date().toISOString().split('T')[0] };
+            showParsedOrderPreview();
+        }
+
+        function showParsedOrderPreview() {
+            if (!parsedOrderData) return;
+
+            const preview = document.getElementById('parsed-order-preview');
+            preview.classList.remove('hidden');
+            preview.innerHTML = `
+                <h4 style="margin-bottom: 16px;">Commande détectée - ${parsedOrderData.products.length} produits</h4>
+                <div class="table-container" style="margin-bottom: 16px;">
+                    <table>
+                        <tr><th>Produit</th><th>Prix unit. HT</th><th>Qté</th><th>Total HT</th></tr>
+                        ${parsedOrderData.products.map(p => `
+                            <tr>
+                                <td>${p.nom}</td>
+                                <td>${p.prixUnitaireHT.toFixed(2)}€</td>
+                                <td>${p.quantite}</td>
+                                <td>${p.totalHT.toFixed(2)}€</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="total-row">
+                            <td colspan="3"><strong>Total HT</strong></td>
+                            <td><strong>${parsedOrderData.totalHT.toFixed(2)}€</strong></td>
+                        </tr>
+                    </table>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn btn-success" onclick="confirmSupplierOrder()">✓ Valider et mettre à jour le stock</button>
+                    <button class="btn btn-secondary" onclick="showManualOrderEntry()">Modifier manuellement</button>
+                    <button class="btn btn-danger" onclick="cancelOrderImport()">Annuler</button>
+                </div>
+            `;
+        }
+
+        function showManualOrderEntry() {
+            const preview = document.getElementById('parsed-order-preview');
+            preview.classList.remove('hidden');
+            preview.innerHTML = `
+                <h4 style="margin-bottom: 16px;">Saisie manuelle de la commande</h4>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label>Rechercher un produit à ajouter</label>
+                    <select id="manual-product-select" class="form-control">
+                        <option value="">Sélectionner un produit...</option>
+                        ${data.produits.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-grid" style="margin-bottom: 16px;">
+                    <div class="form-group">
+                        <label>Prix unit. HT</label>
+                        <input type="number" id="manual-unit-price" class="form-control" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Quantité</label>
+                        <input type="number" id="manual-qty" class="form-control" value="1" min="1">
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:flex-end;">
+                        <button class="btn btn-primary" onclick="addManualProduct()">Ajouter</button>
+                    </div>
+                </div>
+                <div id="manual-products-list"></div>
+                <button class="btn btn-success" style="margin-top: 16px;" onclick="confirmManualOrder()">Valider la commande</button>
+            `;
+
+            if (!parsedOrderData) parsedOrderData = { products: [], totalHT: 0, date: new Date().toISOString().split('T')[0] };
+            updateManualProductsList();
+        }
+
+        function addManualProduct() {
+            const nom = document.getElementById('manual-product-select').value;
+            const prix = parseFloat(document.getElementById('manual-unit-price').value) || 0;
+            const qty = parseInt(document.getElementById('manual-qty').value) || 1;
+
+            if (!nom || prix <= 0) { alert('Sélectionnez un produit et entrez un prix'); return; }
+
+            parsedOrderData.products.push({
+                nom,
+                prixUnitaireHT: prix,
+                quantite: qty,
+                totalHT: prix * qty
+            });
+            parsedOrderData.totalHT = parsedOrderData.products.reduce((sum, p) => sum + p.totalHT, 0);
+
+            document.getElementById('manual-product-select').value = '';
+            document.getElementById('manual-unit-price').value = '';
+            document.getElementById('manual-qty').value = '1';
+
+            updateManualProductsList();
+        }
+
+        function updateManualProductsList() {
+            const list = document.getElementById('manual-products-list');
+            if (!list) return;
+
+            list.innerHTML = parsedOrderData.products.length > 0 ? `
+                <div class="table-container">
+                    <table>
+                        <tr><th>Produit</th><th>Prix unit. HT</th><th>Qté</th><th>Total HT</th><th></th></tr>
+                        ${parsedOrderData.products.map((p, i) => `
+                            <tr>
+                                <td>${p.nom}</td>
+                                <td>${p.prixUnitaireHT.toFixed(2)}€</td>
+                                <td>${p.quantite}</td>
+                                <td>${p.totalHT.toFixed(2)}€</td>
+                                <td><button class="btn btn-danger btn-sm" onclick="removeManualProduct(${i})">×</button></td>
+                            </tr>
+                        `).join('')}
+                        <tr class="total-row">
+                            <td colspan="3"><strong>Total HT</strong></td>
+                            <td colspan="2"><strong>${parsedOrderData.totalHT.toFixed(2)}€</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            ` : '<p style="color:var(--gray-500);">Aucun produit ajouté</p>';
+        }
+
+        function removeManualProduct(index) {
+            parsedOrderData.products.splice(index, 1);
+            parsedOrderData.totalHT = parsedOrderData.products.reduce((sum, p) => sum + p.totalHT, 0);
+            updateManualProductsList();
+        }
+
+        function confirmManualOrder() {
+            confirmSupplierOrder();
+        }
+
+        function confirmSupplierOrder() {
+            if (!parsedOrderData || parsedOrderData.products.length === 0) {
+                alert('Aucun produit dans la commande');
+                return;
+            }
+
+            // Save supplier order
+            const order = {
+                id: generateId(),
+                date: parsedOrderData.date,
+                products: parsedOrderData.products,
+                totalHT: parsedOrderData.totalHT
+            };
+            data.commandesFournisseur.push(order);
+
+            // Update stock and purchase prices
+            parsedOrderData.products.forEach(p => {
+                // Find matching product in inventory
+                const existingProduct = data.produits.find(prod =>
+                    prod.nom.toLowerCase().includes(p.nom.toLowerCase().split(' ')[0]) ||
+                    p.nom.toLowerCase().includes(prod.nom.toLowerCase().split(' ')[0])
+                );
+
+                if (existingProduct) {
+                    // Update stock
+                    data.stock[existingProduct.nom] = (data.stock[existingProduct.nom] || 0) + p.quantite;
+
+                    // Update purchase price
+                    data.prixAchat[existingProduct.nom] = p.prixUnitaireHT;
+
+                    // Add to stock history
+                    data.stockHistory.push({
+                        id: generateId(),
+                        produit: existingProduct.nom,
+                        type: 'commande_fournisseur',
+                        quantite: p.quantite,
+                        coach: 'Fournisseur',
+                        date: parsedOrderData.date,
+                        orderId: order.id
+                    });
+                } else {
+                    // Create new product if it doesn't exist
+                    const newProduct = {
+                        nom: p.nom,
+                        prixBase: p.prixUnitaireHT * 1.3 // Default 30% margin
+                    };
+                    data.produits.push(newProduct);
+                    data.stock[p.nom] = p.quantite;
+                    data.prixAchat[p.nom] = p.prixUnitaireHT;
+                    data.prixHistorique[p.nom] = {};
+                    mois.forEach(m => data.prixHistorique[p.nom][m] = newProduct.prixBase);
+                }
+            });
+
+            saveData();
+
+            // Reset
+            parsedOrderData = null;
+            document.getElementById('import-order-text').value = '';
+            document.getElementById('parsed-order-preview').classList.add('hidden');
+            document.getElementById('parsed-order-preview').innerHTML = '';
+
+            updateManagerView();
+            updateStockDisplay();
+            populateSelects();
+
+            alert(`Commande importée !\n${order.products.length} produits ajoutés au stock\nTotal: ${order.totalHT.toFixed(2)}€ HT`);
+        }
+
+        function cancelOrderImport() {
+            parsedOrderData = null;
+            document.getElementById('import-order-text').value = '';
+            document.getElementById('parsed-order-preview').classList.add('hidden');
+            document.getElementById('parsed-order-preview').innerHTML = '';
+        }
+
+        function updateSupplierOrdersList() {
+            const list = document.getElementById('supplier-orders-list');
+            if (!list) return;
+
+            const orders = (data.commandesFournisseur || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            list.innerHTML = orders.length > 0 ? orders.slice(0, 20).map(o => `
+                <div class="commande-card">
+                    <div class="commande-header">
+                        <span class="commande-date">${o.date}</span>
+                        <span class="commande-coach">📦 Nutripure</span>
+                    </div>
+                    <div class="commande-produits">
+                        ${o.products.map(p => `
+                            <div class="commande-produit-row">
+                                <span>${p.quantite}x ${p.nom}</span>
+                                <span>${p.totalHT.toFixed(2)}€ HT</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="commande-footer">
+                        <span class="commande-total">Total: ${o.totalHT.toFixed(2)}€ HT</span>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSupplierOrder('${o.id}')">Supprimer</button>
+                    </div>
+                </div>
+            `).join('') : '<p style="text-align:center;color:var(--gray-500);">Aucune commande fournisseur</p>';
+        }
+
+        function deleteSupplierOrder(orderId) {
+            if (!confirm('Supprimer cette commande fournisseur ?')) return;
+            data.commandesFournisseur = data.commandesFournisseur.filter(o => o.id !== orderId);
+            saveData();
+            updateManagerView();
         }
 
         window.onclick = e => { if (e.target.classList.contains('modal')) e.target.classList.remove('show'); };
