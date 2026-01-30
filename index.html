@@ -732,14 +732,12 @@
                 <div class="stock-alert-title">Stock bas !</div>
                 <div class="stock-alert-list" id="stock-alert-list"></div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="showReassortModal()">Réassort</button>
         </div>
 
         <!-- Stock Bar -->
         <div class="card stock-bar">
             <div class="stock-header">
                 <div class="stock-title">📦 Stock des Compléments <button class="stock-toggle" onclick="toggleStockDisplay()" id="stock-toggle-btn">▼</button></div>
-                <button class="btn btn-success btn-sm" onclick="showReassortModal()">+ Réassort</button>
             </div>
             <div class="stock-grid" id="stock-grid"></div>
         </div>
@@ -948,7 +946,6 @@
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">📦</div> Gestion du Stock</div>
-                    <button class="btn btn-success btn-sm" onclick="showReassortModal()">+ Réassort</button>
                 </div>
                 <div class="form-grid">
                     <div class="form-group">
@@ -962,7 +959,9 @@
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" onclick="resetAllStock()">Remettre tout le stock à 0</button>
+                <p style="color: var(--gray-500); font-size: 0.85rem; margin-top: 12px;">
+                    Le réassort se fait via l'espace Gérant en important les commandes fournisseur.
+                </p>
             </div>
         </div>
     </div>
@@ -1113,20 +1112,37 @@
                 </div>
             </div>
 
+            <!-- Réglage Manuel du Stock (première fois) -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📝</div> Réglage Manuel du Stock</div>
+                </div>
+                <div class="alert alert-warning">
+                    Utilisez cette section pour initialiser le stock manuellement (première fois) ou faire des ajustements.
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <input type="text" id="manual-stock-search" class="form-control" placeholder="Rechercher un produit..." oninput="filterManualStock()">
+                </div>
+                <div class="item-list" id="manual-stock-list" style="max-height: 400px;"></div>
+            </div>
+
             <!-- Import Commande Fournisseur -->
             <div class="card">
                 <div class="card-header">
-                    <div class="card-title"><div class="card-title-icon">📥</div> Importer Commande Fournisseur</div>
+                    <div class="card-title"><div class="card-title-icon">📥</div> Importer Commande Fournisseur (Réassort)</div>
                 </div>
                 <div class="alert alert-info">
-                    Collez le contenu de votre commande Nutripure (copiez depuis le PDF) pour mettre à jour le stock et les coûts d'achat.
+                    Collez le contenu de votre commande Nutripure (copiez depuis le PDF) pour mettre à jour le stock et les coûts d'achat automatiquement.
                 </div>
                 <div class="import-zone" onclick="document.getElementById('import-order-text').focus()">
                     <div class="import-zone-icon">📋</div>
                     <div class="import-zone-text">Collez le texte de votre commande ici</div>
-                    <textarea id="import-order-text" class="form-control" rows="6" placeholder="Collez le contenu copié depuis le PDF de commande Nutripure..."></textarea>
+                    <textarea id="import-order-text" class="form-control" rows="6" placeholder="Ouvrez le PDF, sélectionnez tout (Ctrl+A), copiez (Ctrl+C) et collez ici..."></textarea>
                 </div>
-                <button class="btn btn-primary" onclick="parseSupplierOrder()">Analyser la commande</button>
+                <div style="display: flex; gap: 12px; margin-top: 12px;">
+                    <button class="btn btn-primary" onclick="parseSupplierOrder()">Analyser la commande</button>
+                    <button class="btn btn-secondary" onclick="showManualOrderEntry()">Saisie manuelle</button>
+                </div>
                 <div id="parsed-order-preview" class="hidden" style="margin-top: 20px;"></div>
             </div>
 
@@ -3247,6 +3263,9 @@
 
             // Purchase prices
             filterPurchasePrices();
+
+            // Manual stock
+            filterManualStock();
         }
 
         function updateProfitChart() {
@@ -3739,6 +3758,58 @@
             data.prixAchat[productName] = price;
             saveData();
             updateManagerView();
+        }
+
+        // Manual stock adjustment
+        function filterManualStock() {
+            const search = (document.getElementById('manual-stock-search')?.value || '').toLowerCase();
+            const filtered = data.produits.filter(p => p.nom.toLowerCase().includes(search));
+
+            document.getElementById('manual-stock-list').innerHTML = filtered.map(p => {
+                const currentStock = data.stock[p.nom] || 0;
+                const stockClass = getStockClass(currentStock);
+                return `
+                    <div class="item-row">
+                        <div class="item-info">
+                            <strong>${p.nom}</strong>
+                            <small>Stock actuel: <span class="stock-badge ${stockClass}">${currentStock}</span></small>
+                        </div>
+                        <div class="item-actions">
+                            <input type="number" class="quantity-input" id="manual-stock-${p.nom.replace(/[^a-zA-Z0-9]/g, '_')}" value="${currentStock}" min="0" style="width: 80px;">
+                            <button class="btn btn-primary btn-sm" onclick="saveManualStock('${p.nom.replace(/'/g, "\\'")}')">OK</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function saveManualStock(productName) {
+            const inputId = `manual-stock-${productName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const oldStock = data.stock[productName] || 0;
+            const newStock = parseInt(input.value) || 0;
+            const diff = newStock - oldStock;
+
+            data.stock[productName] = newStock;
+
+            // Log the adjustment
+            if (diff !== 0) {
+                data.stockHistory.push({
+                    id: generateId(),
+                    produit: productName,
+                    type: 'ajustement_manuel',
+                    quantite: diff,
+                    coach: 'Gérant',
+                    date: new Date().toISOString().split('T')[0]
+                });
+                logActivity(`Ajustement stock: ${productName} (${diff > 0 ? '+' : ''}${diff})`);
+            }
+
+            saveData();
+            filterManualStock();
+            updateStockDisplay();
         }
 
         function parseSupplierOrder() {
