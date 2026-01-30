@@ -6,6 +6,7 @@
     <title>NutriPure - Gestion des Commissions</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root {
             --primary: #E31E24;
@@ -569,6 +570,8 @@
         th { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
         tr:hover { background: var(--gray-50); }
         .total-row { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important; color: white; font-weight: 700; }
+        tr.highlight-warning { background: #fef3cd !important; }
+        tr.highlight-warning:hover { background: #fde68a !important; }
 
         .item-list { display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; }
 
@@ -1132,15 +1135,24 @@
                     <div class="card-title"><div class="card-title-icon">📥</div> Importer Commande Fournisseur (Réassort)</div>
                 </div>
                 <div class="alert alert-info">
-                    Collez le contenu de votre commande Nutripure (copiez depuis le PDF) pour mettre à jour le stock et les coûts d'achat automatiquement.
+                    Importez directement le PDF de votre commande Nutripure pour mettre à jour le stock et les prix d'achat automatiquement.
                 </div>
-                <div class="import-zone" onclick="document.getElementById('import-order-text').focus()">
-                    <div class="import-zone-icon">📋</div>
-                    <div class="import-zone-text">Collez le texte de votre commande ici</div>
-                    <textarea id="import-order-text" class="form-control" rows="6" placeholder="Ouvrez le PDF, sélectionnez tout (Ctrl+A), copiez (Ctrl+C) et collez ici..."></textarea>
+                <div class="import-zone" id="pdf-drop-zone"
+                     onclick="document.getElementById('pdf-upload').click()"
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)"
+                     ondrop="handleDrop(event)"
+                     style="cursor: pointer;">
+                    <div class="import-zone-icon">📄</div>
+                    <div class="import-zone-text">Cliquez ici pour importer le PDF de commande</div>
+                    <input type="file" id="pdf-upload" accept=".pdf" style="display: none;" onchange="handlePDFUpload(event)">
+                    <p style="color: var(--gray-400); font-size: 0.85rem; margin-top: 8px;">ou glissez-déposez le fichier</p>
+                </div>
+                <div id="pdf-loading" class="hidden" style="text-align: center; padding: 20px;">
+                    <div style="font-size: 2rem;">⏳</div>
+                    <p>Lecture du PDF en cours...</p>
                 </div>
                 <div style="display: flex; gap: 12px; margin-top: 12px;">
-                    <button class="btn btn-primary" onclick="parseSupplierOrder()">Analyser la commande</button>
                     <button class="btn btn-secondary" onclick="showManualOrderEntry()">Saisie manuelle</button>
                 </div>
                 <div id="parsed-order-preview" class="hidden" style="margin-top: 20px;"></div>
@@ -3810,6 +3822,311 @@
             saveData();
             filterManualStock();
             updateStockDisplay();
+        }
+
+        // Drag & Drop handlers for PDF
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const zone = document.getElementById('pdf-drop-zone');
+            zone.style.borderColor = 'var(--primary)';
+            zone.style.background = 'rgba(227, 30, 36, 0.1)';
+        }
+
+        function handleDragLeave(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const zone = document.getElementById('pdf-drop-zone');
+            zone.style.borderColor = '';
+            zone.style.background = '';
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const zone = document.getElementById('pdf-drop-zone');
+            zone.style.borderColor = '';
+            zone.style.background = '';
+
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'application/pdf') {
+                    processPDFFile(file);
+                } else {
+                    alert('Veuillez déposer un fichier PDF');
+                }
+            }
+        }
+
+        // Configuration PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        async function handlePDFUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.type !== 'application/pdf') {
+                alert('Veuillez sélectionner un fichier PDF');
+                return;
+            }
+
+            await processPDFFile(file);
+
+            // Reset file input for next upload
+            event.target.value = '';
+        }
+
+        async function processPDFFile(file) {
+            // Show loading
+            document.getElementById('pdf-loading').classList.remove('hidden');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+                let fullText = '';
+
+                // Extract text from all pages
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+
+                    // Reconstruct text with positioning info
+                    let lastY = null;
+                    let lineText = '';
+
+                    textContent.items.forEach(item => {
+                        // Check if we're on a new line (Y position changed significantly)
+                        if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
+                            fullText += lineText + '\n';
+                            lineText = '';
+                        }
+                        lineText += item.str + ' ';
+                        lastY = item.transform[5];
+                    });
+                    fullText += lineText + '\n';
+                }
+
+                // Hide loading
+                document.getElementById('pdf-loading').classList.add('hidden');
+
+                // Parse the extracted text
+                parsePDFContent(fullText);
+
+            } catch (error) {
+                document.getElementById('pdf-loading').classList.add('hidden');
+                console.error('Erreur PDF:', error);
+                alert('Erreur lors de la lecture du PDF. Essayez la saisie manuelle.');
+                showManualOrderEntry();
+            }
+        }
+
+        function parsePDFContent(text) {
+            console.log('Texte extrait du PDF:', text); // Pour debug
+
+            const lines = text.split('\n').filter(l => l.trim());
+            const products = [];
+            let totalHT = 0;
+
+            // Patterns spécifiques pour les PDFs Nutripure
+            // Format attendu: REF | Produit | TVA | Prix base | Prix unit HT | Qté | Total HT
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+
+                // Skip header lines and empty lines
+                if (line.includes('Référence') || line.includes('Produit') ||
+                    line.includes('Total HT') && !line.match(/\d+[,.]?\d*\s*€/) ||
+                    line.length < 5) continue;
+
+                // Pattern 1: Try to match lines with NUTRI_ references
+                const nutriMatch = line.match(/^(NUTRI_[A-Z0-9_]+)\s+(.+?)(?:\s+5,50?\s*%|\s+\d+[,.]?\d*\s*€)/i);
+
+                // Pattern 2: General line with multiple prices
+                const pricePattern = /(\d+[,.]?\d*)\s*€/g;
+                const prices = [...line.matchAll(pricePattern)].map(m => parseFloat(m[1].replace(',', '.')));
+
+                // Pattern 3: Look for quantity - often standalone number near the end
+                const qtyMatch = line.match(/(\d+)\s*(?:\d+[,.]?\d*\s*€\s*)?$/);
+                const qtyInMiddle = line.match(/€\s*(\d+)\s+\d+[,.]?\d*\s*€/);
+
+                if (prices.length >= 2) {
+                    let productName = '';
+                    let reference = '';
+                    let qty = 1;
+                    let unitPrice = 0;
+                    let lineTotal = 0;
+
+                    // Extract reference and product name
+                    if (nutriMatch) {
+                        reference = nutriMatch[1];
+                        productName = nutriMatch[2].trim();
+                    } else {
+                        // Try to get product name from the beginning of line
+                        const nameMatch = line.match(/^([A-Za-zÀ-ÿ\s\-\.]+?)(?:\s+5,50?\s*%|\s+\d)/);
+                        if (nameMatch) productName = nameMatch[1].trim();
+                    }
+
+                    // Extract quantity
+                    if (qtyInMiddle) {
+                        qty = parseInt(qtyInMiddle[1]);
+                    } else if (qtyMatch && parseInt(qtyMatch[1]) < 100) {
+                        qty = parseInt(qtyMatch[1]);
+                    }
+
+                    // For Nutripure PDFs: Unit price is before quantity, total is after
+                    // Typical order: base_price, unit_price, qty, total
+                    if (prices.length >= 3) {
+                        // Usually: [base_price, unit_price, total] or with qty
+                        unitPrice = prices[prices.length - 2] || prices[1];
+                        lineTotal = prices[prices.length - 1];
+                    } else {
+                        unitPrice = prices[0];
+                        lineTotal = prices[1];
+                    }
+
+                    // Match with existing products in the database
+                    if (productName && unitPrice > 0) {
+                        // Try to find a matching product in our database
+                        const matchedProduct = findMatchingProduct(productName);
+
+                        products.push({
+                            reference: reference,
+                            nom: matchedProduct || productName,
+                            nomOriginal: productName,
+                            prixUnitaireHT: unitPrice,
+                            quantite: qty > 0 ? qty : 1,
+                            totalHT: lineTotal || (unitPrice * qty),
+                            matched: !!matchedProduct
+                        });
+                        totalHT += lineTotal || (unitPrice * qty);
+                    }
+                }
+            }
+
+            if (products.length === 0) {
+                alert('Aucun produit détecté dans le PDF. Utilisez la saisie manuelle.');
+                showManualOrderEntry();
+                return;
+            }
+
+            parsedOrderData = { products, totalHT, date: new Date().toISOString().split('T')[0] };
+            showParsedOrderPreviewPDF();
+        }
+
+        function findMatchingProduct(pdfProductName) {
+            const searchName = pdfProductName.toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[^a-zà-ÿ0-9\s]/g, '');
+
+            // Try exact match first
+            for (const p of data.produits) {
+                if (p.nom.toLowerCase() === searchName) return p.nom;
+            }
+
+            // Try partial match
+            for (const p of data.produits) {
+                const prodName = p.nom.toLowerCase();
+                if (searchName.includes(prodName) || prodName.includes(searchName)) {
+                    return p.nom;
+                }
+            }
+
+            // Try keyword matching
+            const keywords = searchName.split(' ').filter(w => w.length > 3);
+            for (const p of data.produits) {
+                const prodName = p.nom.toLowerCase();
+                const matchCount = keywords.filter(kw => prodName.includes(kw)).length;
+                if (matchCount >= 2 || (keywords.length === 1 && matchCount === 1)) {
+                    return p.nom;
+                }
+            }
+
+            return null; // No match found
+        }
+
+        function showParsedOrderPreviewPDF() {
+            if (!parsedOrderData) return;
+
+            const preview = document.getElementById('parsed-order-preview');
+            preview.classList.remove('hidden');
+
+            const unmatchedCount = parsedOrderData.products.filter(p => !p.matched).length;
+
+            preview.innerHTML = `
+                <h4 style="margin-bottom: 16px;">📄 Commande PDF détectée - ${parsedOrderData.products.length} produits</h4>
+                ${unmatchedCount > 0 ? `
+                    <div class="alert alert-warning" style="margin-bottom: 16px;">
+                        ⚠️ ${unmatchedCount} produit(s) non reconnu(s). Vérifiez la correspondance ci-dessous.
+                    </div>
+                ` : `
+                    <div class="alert alert-success" style="margin-bottom: 16px;">
+                        ✓ Tous les produits ont été reconnus automatiquement
+                    </div>
+                `}
+                <div class="table-container">
+                    <table>
+                        <tr>
+                            <th>Produit détecté</th>
+                            <th>→ Produit système</th>
+                            <th>Prix unit. HT</th>
+                            <th>Qté</th>
+                            <th>Total HT</th>
+                        </tr>
+                        ${parsedOrderData.products.map((p, i) => `
+                            <tr class="${p.matched ? '' : 'highlight-warning'}">
+                                <td style="font-size: 0.85rem;">${p.nomOriginal || p.nom}</td>
+                                <td>
+                                    <select class="form-control" style="padding: 4px 8px; font-size: 0.85rem;"
+                                            onchange="updateProductMatch(${i}, this.value)">
+                                        <option value="">-- Non assigné --</option>
+                                        ${data.produits.map(prod => `
+                                            <option value="${prod.nom}" ${p.nom === prod.nom ? 'selected' : ''}>
+                                                ${prod.nom}
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                </td>
+                                <td>${p.prixUnitaireHT.toFixed(2)}€</td>
+                                <td>
+                                    <input type="number" class="form-control" style="width: 60px; padding: 4px;"
+                                           value="${p.quantite}" min="1"
+                                           onchange="updateProductQty(${i}, this.value)">
+                                </td>
+                                <td>${p.totalHT.toFixed(2)}€</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="total-row">
+                            <td colspan="4"><strong>Total HT</strong></td>
+                            <td><strong>${parsedOrderData.totalHT.toFixed(2)}€</strong></td>
+                        </tr>
+                    </table>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button class="btn btn-success" onclick="confirmSupplierOrder()">✓ Valider et mettre à jour le stock</button>
+                    <button class="btn btn-secondary" onclick="showManualOrderEntry()">Saisie manuelle</button>
+                    <button class="btn btn-danger" onclick="cancelOrderImport()">Annuler</button>
+                </div>
+            `;
+        }
+
+        function updateProductMatch(index, productName) {
+            if (parsedOrderData && parsedOrderData.products[index]) {
+                parsedOrderData.products[index].nom = productName;
+                parsedOrderData.products[index].matched = !!productName;
+            }
+        }
+
+        function updateProductQty(index, qty) {
+            if (parsedOrderData && parsedOrderData.products[index]) {
+                const newQty = parseInt(qty) || 1;
+                const p = parsedOrderData.products[index];
+                const oldTotal = p.totalHT;
+                p.quantite = newQty;
+                p.totalHT = p.prixUnitaireHT * newQty;
+                parsedOrderData.totalHT = parsedOrderData.totalHT - oldTotal + p.totalHT;
+            }
         }
 
         function parseSupplierOrder() {
