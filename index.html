@@ -969,28 +969,151 @@
 
         <!-- Vue Gérant (protégée) -->
         <div id="manager-view" class="hidden">
+            <!-- Header avec actions -->
             <div class="manager-card">
-                <h2 style="margin-bottom: 20px;">🔐 Espace Gérant - Thomas</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+                    <h2>🔐 Espace Gérant - Thomas</h2>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-info btn-sm" onclick="exportManagerData()">📤 Exporter données</button>
+                        <button class="btn btn-success btn-sm" onclick="document.getElementById('manager-import-file').click()">📥 Importer données</button>
+                        <input type="file" id="manager-import-file" accept=".json" style="display:none" onchange="importManagerData(event)">
+                        <button class="btn btn-secondary btn-sm" onclick="showChangePasswordModal()">🔑 Changer MDP</button>
+                        <button class="btn btn-primary btn-sm" onclick="generateMonthlyReport()">📊 Rapport mensuel</button>
+                    </div>
+                </div>
                 <div class="manager-stat-grid">
                     <div class="manager-stat revenue">
                         <div class="manager-stat-value" id="manager-revenue">0€</div>
                         <div class="manager-stat-label">Chiffre d'affaires</div>
+                        <div id="manager-revenue-comp" style="font-size:0.75rem;margin-top:4px;"></div>
                     </div>
                     <div class="manager-stat cost">
                         <div class="manager-stat-value" id="manager-costs">0€</div>
                         <div class="manager-stat-label">Coût d'achat</div>
                     </div>
+                    <div class="manager-stat">
+                        <div class="manager-stat-value" id="manager-commissions">0€</div>
+                        <div class="manager-stat-label">Commissions coachs</div>
+                    </div>
+                    <div class="manager-stat">
+                        <div class="manager-stat-value" id="manager-fixed-costs">0€</div>
+                        <div class="manager-stat-label">Frais fixes</div>
+                    </div>
+                    <div class="manager-stat">
+                        <div class="manager-stat-value" id="manager-tva">0€</div>
+                        <div class="manager-stat-label">TVA à reverser</div>
+                    </div>
                     <div class="manager-stat profit">
                         <div class="manager-stat-value" id="manager-profit">0€</div>
-                        <div class="manager-stat-label">Bénéfice net</div>
+                        <div class="manager-stat-label">Bénéfice NET</div>
                     </div>
                     <div class="manager-stat">
                         <div class="manager-stat-value" id="manager-margin">0%</div>
-                        <div class="manager-stat-label">Marge moyenne</div>
+                        <div class="manager-stat-label">Marge nette</div>
+                    </div>
+                    <div class="manager-stat">
+                        <div class="manager-stat-value" id="manager-stock-value">0€</div>
+                        <div class="manager-stat-label">Valeur stock</div>
                     </div>
                 </div>
             </div>
 
+            <!-- Graphique évolution -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📈</div> Évolution des Bénéfices</div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="profitChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Comparaison périodes -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📊</div> Comparaison Périodes</div>
+                </div>
+                <div id="period-comparison"></div>
+            </div>
+
+            <!-- Frais fixes -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">🏢</div> Frais Fixes Mensuels</div>
+                    <button class="btn btn-primary btn-sm" onclick="showAddFixedCostModal()">+ Ajouter</button>
+                </div>
+                <div id="fixed-costs-list"></div>
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 2px solid var(--gray-200); display: flex; justify-content: space-between;">
+                    <strong>Total frais fixes mensuels :</strong>
+                    <strong id="total-fixed-costs">0€</strong>
+                </div>
+            </div>
+
+            <!-- Objectifs Coachs -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">🎯</div> Objectifs & Classement Coachs</div>
+                </div>
+                <div class="form-grid" style="margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label>Objectif mensuel global (€)</label>
+                        <input type="number" id="monthly-objective" class="form-control" value="0" onchange="saveObjective()">
+                    </div>
+                    <div class="form-group">
+                        <label>Mois en cours</label>
+                        <select id="objective-month" class="form-control" onchange="updateManagerView()"></select>
+                    </div>
+                </div>
+                <div id="coach-objectives"></div>
+            </div>
+
+            <!-- Analyse Stock -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📦</div> Analyse du Stock</div>
+                </div>
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stock-total-units">0</div>
+                        <div class="stat-label">Unités en stock</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stock-purchase-value">0€</div>
+                        <div class="stat-label">Valeur achat</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stock-sale-value">0€</div>
+                        <div class="stat-label">Valeur revente</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stock-potential-profit">0€</div>
+                        <div class="stat-label">Bénéfice potentiel</div>
+                    </div>
+                </div>
+                <h4 style="margin-bottom: 12px;">⚠️ Produits à réapprovisionner</h4>
+                <div id="reorder-alerts"></div>
+                <h4 style="margin: 20px 0 12px;">🐌 Rotation lente (peu vendus)</h4>
+                <div id="slow-rotation"></div>
+            </div>
+
+            <!-- Produits les plus/moins rentables -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">💎</div> Produits Rentables vs Non Rentables</div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h4 style="color: var(--success); margin-bottom: 12px;">🚀 Top 5 Plus Rentables</h4>
+                        <div id="top-profitable"></div>
+                    </div>
+                    <div>
+                        <h4 style="color: var(--danger); margin-bottom: 12px;">⚠️ 5 Moins Rentables</h4>
+                        <div id="least-profitable"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Commande Fournisseur -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">📥</div> Importer Commande Fournisseur</div>
@@ -1007,6 +1130,7 @@
                 <div id="parsed-order-preview" class="hidden" style="margin-top: 20px;"></div>
             </div>
 
+            <!-- Historique Commandes Fournisseur -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">📦</div> Historique des Commandes Fournisseur</div>
@@ -1014,6 +1138,7 @@
                 <div id="supplier-orders-list"></div>
             </div>
 
+            <!-- Marges par produit -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">💰</div> Marges par Produit</div>
@@ -1032,6 +1157,7 @@
                 </div>
             </div>
 
+            <!-- Performance Coachs détaillée -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">👥</div> Performance des Coachs</div>
@@ -1041,13 +1167,33 @@
                         <tr>
                             <th>Coach</th>
                             <th>Ventes</th>
+                            <th>Objectif</th>
                             <th>Commission</th>
                             <th>Bénéfice généré</th>
+                            <th>Statut</th>
                         </tr>
                     </table>
                 </div>
             </div>
 
+            <!-- Historique paiements commissions -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">💳</div> Paiements des Commissions</div>
+                    <button class="btn btn-success btn-sm" onclick="showPayCommissionModal()">+ Enregistrer paiement</button>
+                </div>
+                <div id="commission-payments-list"></div>
+            </div>
+
+            <!-- Journal d'activité -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📋</div> Journal d'Activité</div>
+                </div>
+                <div id="activity-log" style="max-height: 300px; overflow-y: auto;"></div>
+            </div>
+
+            <!-- Configuration Prix d'Achat -->
             <div class="card">
                 <div class="card-header">
                     <div class="card-title"><div class="card-title-icon">⚙️</div> Configuration Prix d'Achat</div>
@@ -1078,6 +1224,106 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('manager-login-modal')">Annuler</button>
                 <button class="btn btn-primary" onclick="loginManager()">Connexion</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Changer Mot de passe -->
+    <div id="change-password-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔑 Changer le mot de passe</h2>
+                <button class="modal-close" onclick="closeModal('change-password-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Ancien mot de passe</label>
+                    <input type="password" id="old-password" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Nouveau mot de passe</label>
+                    <input type="password" id="new-password" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Confirmer nouveau mot de passe</label>
+                    <input type="password" id="confirm-password" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('change-password-modal')">Annuler</button>
+                <button class="btn btn-primary" onclick="changePassword()">Changer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ajouter Frais Fixe -->
+    <div id="add-fixed-cost-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏢 Ajouter un frais fixe</h2>
+                <button class="modal-close" onclick="closeModal('add-fixed-cost-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="fixed-cost-name" class="form-control" placeholder="Ex: Loyer, Électricité...">
+                </div>
+                <div class="form-group">
+                    <label>Montant mensuel (€)</label>
+                    <input type="number" id="fixed-cost-amount" class="form-control" step="0.01" min="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('add-fixed-cost-modal')">Annuler</button>
+                <button class="btn btn-primary" onclick="addFixedCost()">Ajouter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Payer Commission -->
+    <div id="pay-commission-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💳 Enregistrer un paiement</h2>
+                <button class="modal-close" onclick="closeModal('pay-commission-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Coach</label>
+                    <select id="payment-coach" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label>Mois concerné</label>
+                    <select id="payment-month" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label>Montant (€)</label>
+                    <input type="number" id="payment-amount" class="form-control" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Notes (optionnel)</label>
+                    <input type="text" id="payment-notes" class="form-control" placeholder="Ex: Virement, Espèces...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('pay-commission-modal')">Annuler</button>
+                <button class="btn btn-success" onclick="saveCommissionPayment()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Rapport Mensuel -->
+    <div id="monthly-report-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>📊 Rapport Mensuel</h2>
+                <button class="modal-close" onclick="closeModal('monthly-report-modal')">×</button>
+            </div>
+            <div class="modal-body" id="monthly-report-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('monthly-report-modal')">Fermer</button>
+                <button class="btn btn-primary" onclick="printReport()">🖨️ Imprimer</button>
+                <button class="btn btn-success" onclick="downloadReportPDF()">📄 Télécharger</button>
             </div>
         </div>
     </div>
@@ -1332,7 +1578,12 @@
         if (!data.stockAlertThreshold) data.stockAlertThreshold = 3;
         if (!data.prixAchat) data.prixAchat = {};
         if (!data.commandesFournisseur) data.commandesFournisseur = [];
-        if (!data.managerPassword) data.managerPassword = 'thomas2024'; // Default password
+        if (!data.managerPassword) data.managerPassword = 'thomas2024';
+        if (!data.fixedCosts) data.fixedCosts = [];
+        if (!data.commissionPayments) data.commissionPayments = [];
+        if (!data.activityLog) data.activityLog = [];
+        if (!data.monthlyObjective) data.monthlyObjective = 0;
+        if (!data.coachObjectives) data.coachObjectives = {};
 
         // Panier / Cart state
         let cart = { clientId: null, items: {}, step: 'client' };
@@ -2885,42 +3136,308 @@
         function updateManagerView() {
             if (!isManagerLoggedIn) return;
 
+            // Populate month selects
+            const objMonthSelect = document.getElementById('objective-month');
+            if (objMonthSelect) {
+                objMonthSelect.innerHTML = mois.map(m => `<option value="${m}">${m}</option>`).join('');
+            }
+            document.getElementById('monthly-objective').value = data.monthlyObjective || 0;
+
             // Calculate totals
             const totalRevenue = data.commandes.reduce((sum, c) => sum + c.total, 0);
-
             let totalCosts = 0;
-            let totalProfit = 0;
             const productStats = {};
 
             data.commandes.forEach(c => {
                 c.produits.forEach(p => {
                     const prixAchat = data.prixAchat[p.nom] || 0;
                     const cost = prixAchat * p.quantite;
-                    const revenue = p.prixUnitaire * p.quantite;
                     totalCosts += cost;
 
                     if (!productStats[p.nom]) {
                         productStats[p.nom] = { sold: 0, revenue: 0, cost: 0 };
                     }
                     productStats[p.nom].sold += p.quantite;
-                    productStats[p.nom].revenue += revenue;
+                    productStats[p.nom].revenue += p.prixUnitaire * p.quantite;
                     productStats[p.nom].cost += cost;
                 });
             });
 
-            // Add supplier order costs
-            const supplierCosts = data.commandesFournisseur.reduce((sum, o) => sum + o.totalHT, 0);
+            // Calculate commissions
+            let totalCommissions = 0;
+            data.coachs.forEach(coach => {
+                let coachVentes = 0;
+                mois.forEach(m => { coachVentes += calculerVentesCoach(m, coach); });
+                totalCommissions += calculerCommission(coachVentes);
+            });
 
-            totalProfit = totalRevenue - totalCosts;
-            const margin = totalRevenue > 0 ? (totalProfit / totalRevenue * 100) : 0;
+            // Fixed costs
+            const totalFixedCosts = (data.fixedCosts || []).reduce((sum, f) => sum + f.amount, 0);
 
+            // TVA (5.5% on revenue)
+            const tva = totalRevenue * 0.055;
+
+            // Net profit
+            const netProfit = totalRevenue - totalCosts - totalCommissions - totalFixedCosts;
+            const netMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0;
+
+            // Stock value
+            let stockPurchaseValue = 0;
+            let stockSaleValue = 0;
+            let totalUnits = 0;
+            data.produits.forEach(p => {
+                const qty = data.stock[p.nom] || 0;
+                totalUnits += qty;
+                stockPurchaseValue += qty * (data.prixAchat[p.nom] || 0);
+                stockSaleValue += qty * p.prixBase;
+            });
+
+            // Update main stats
             document.getElementById('manager-revenue').textContent = totalRevenue.toFixed(2) + '€';
             document.getElementById('manager-costs').textContent = totalCosts.toFixed(2) + '€';
-            document.getElementById('manager-profit').textContent = totalProfit.toFixed(2) + '€';
-            document.getElementById('manager-profit').className = `manager-stat-value ${totalProfit >= 0 ? 'profit-positive' : 'profit-negative'}`;
-            document.getElementById('manager-margin').textContent = margin.toFixed(1) + '%';
+            document.getElementById('manager-commissions').textContent = totalCommissions.toFixed(2) + '€';
+            document.getElementById('manager-fixed-costs').textContent = totalFixedCosts.toFixed(2) + '€';
+            document.getElementById('manager-tva').textContent = tva.toFixed(2) + '€';
+            document.getElementById('manager-profit').textContent = netProfit.toFixed(2) + '€';
+            document.getElementById('manager-profit').className = `manager-stat-value ${netProfit >= 0 ? 'profit-positive' : 'profit-negative'}`;
+            document.getElementById('manager-margin').textContent = netMargin.toFixed(1) + '%';
+            document.getElementById('manager-stock-value').textContent = stockSaleValue.toFixed(0) + '€';
+
+            // Stock analysis
+            document.getElementById('stock-total-units').textContent = totalUnits;
+            document.getElementById('stock-purchase-value').textContent = stockPurchaseValue.toFixed(2) + '€';
+            document.getElementById('stock-sale-value').textContent = stockSaleValue.toFixed(2) + '€';
+            document.getElementById('stock-potential-profit').textContent = (stockSaleValue - stockPurchaseValue).toFixed(2) + '€';
+
+            // Profit evolution chart
+            updateProfitChart();
+
+            // Period comparison
+            updatePeriodComparison();
+
+            // Fixed costs list
+            updateFixedCostsList();
+
+            // Coach objectives & ranking
+            updateCoachObjectives();
+
+            // Reorder alerts
+            updateReorderAlerts();
+
+            // Slow rotation products
+            updateSlowRotation(productStats);
+
+            // Top profitable / least profitable
+            updateProfitabilityRanking(productStats);
 
             // Margins table
+            updateMarginsTable(productStats);
+
+            // Coach performance table
+            updateCoachPerformanceTable();
+
+            // Commission payments
+            updateCommissionPaymentsList();
+
+            // Activity log
+            updateActivityLog();
+
+            // Supplier orders list
+            updateSupplierOrdersList();
+
+            // Purchase prices
+            filterPurchasePrices();
+        }
+
+        function updateProfitChart() {
+            const ctx = document.getElementById('profitChart');
+            if (!ctx) return;
+
+            const monthlyData = mois.map(m => {
+                let revenue = 0, costs = 0, commissions = 0;
+                data.commandes.filter(c => c.mois === m).forEach(c => {
+                    revenue += c.total;
+                    c.produits.forEach(p => {
+                        costs += (data.prixAchat[p.nom] || 0) * p.quantite;
+                    });
+                });
+                data.coachs.forEach(coach => {
+                    const ventes = calculerVentesCoach(m, coach);
+                    commissions += calculerCommission(ventes);
+                });
+                const fixedCosts = (data.fixedCosts || []).reduce((sum, f) => sum + f.amount, 0);
+                return { revenue, costs, profit: revenue - costs - commissions - fixedCosts };
+            });
+
+            if (charts.profit) charts.profit.destroy();
+            charts.profit = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: mois,
+                    datasets: [
+                        { label: 'CA', data: monthlyData.map(d => d.revenue), backgroundColor: '#3b82f6' },
+                        { label: 'Coûts', data: monthlyData.map(d => d.costs), backgroundColor: '#f59e0b' },
+                        { label: 'Bénéfice', data: monthlyData.map(d => d.profit), backgroundColor: '#10b981' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function updatePeriodComparison() {
+            const currentMonth = document.getElementById('objective-month')?.value || mois[0];
+            const currentIdx = mois.indexOf(currentMonth);
+            const prevMonth = currentIdx > 0 ? mois[currentIdx - 1] : null;
+
+            let currentCA = 0, prevCA = 0, currentProfit = 0, prevProfit = 0;
+
+            data.commandes.filter(c => c.mois === currentMonth).forEach(c => {
+                currentCA += c.total;
+                c.produits.forEach(p => { currentProfit += (p.prixUnitaire - (data.prixAchat[p.nom] || 0)) * p.quantite; });
+            });
+
+            if (prevMonth) {
+                data.commandes.filter(c => c.mois === prevMonth).forEach(c => {
+                    prevCA += c.total;
+                    c.produits.forEach(p => { prevProfit += (p.prixUnitaire - (data.prixAchat[p.nom] || 0)) * p.quantite; });
+                });
+            }
+
+            const caChange = prevCA > 0 ? ((currentCA - prevCA) / prevCA * 100) : 0;
+            const profitChange = prevProfit > 0 ? ((currentProfit - prevProfit) / prevProfit * 100) : 0;
+
+            document.getElementById('period-comparison').innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${currentCA.toFixed(0)}€</div>
+                        <div class="stat-label">CA ${currentMonth}</div>
+                        ${prevMonth ? `<div class="comparison-badge ${caChange >= 0 ? 'comparison-up' : 'comparison-down'}">${caChange >= 0 ? '↑' : '↓'} ${Math.abs(caChange).toFixed(1)}% vs ${prevMonth}</div>` : ''}
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${currentProfit.toFixed(0)}€</div>
+                        <div class="stat-label">Bénéfice ${currentMonth}</div>
+                        ${prevMonth ? `<div class="comparison-badge ${profitChange >= 0 ? 'comparison-up' : 'comparison-down'}">${profitChange >= 0 ? '↑' : '↓'} ${Math.abs(profitChange).toFixed(1)}% vs ${prevMonth}</div>` : ''}
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.commandes.filter(c => c.mois === currentMonth).length}</div>
+                        <div class="stat-label">Commandes ${currentMonth}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateFixedCostsList() {
+            const list = document.getElementById('fixed-costs-list');
+            if (!list) return;
+
+            list.innerHTML = (data.fixedCosts || []).map(f => `
+                <div class="item-row">
+                    <div class="item-info"><strong>${f.name}</strong></div>
+                    <div class="item-actions">
+                        <span style="font-weight:700;margin-right:12px;">${f.amount.toFixed(2)}€/mois</span>
+                        <button class="btn btn-danger btn-sm" onclick="deleteFixedCost('${f.id}')">×</button>
+                    </div>
+                </div>
+            `).join('') || '<p style="color:var(--gray-500);">Aucun frais fixe configuré</p>';
+
+            const total = (data.fixedCosts || []).reduce((sum, f) => sum + f.amount, 0);
+            document.getElementById('total-fixed-costs').textContent = total.toFixed(2) + '€';
+        }
+
+        function updateCoachObjectives() {
+            const currentMonth = document.getElementById('objective-month')?.value || mois[0];
+            const objective = data.monthlyObjective || 0;
+            const coachObjective = objective / data.coachs.length;
+
+            const coachData = data.coachs.map(coach => {
+                const ventes = calculerVentesCoach(currentMonth, coach);
+                const progress = coachObjective > 0 ? (ventes / coachObjective * 100) : 0;
+                return { coach, ventes, progress };
+            }).sort((a, b) => b.ventes - a.ventes);
+
+            document.getElementById('coach-objectives').innerHTML = coachData.map((c, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+                const progressColor = c.progress >= 100 ? 'var(--success)' : c.progress >= 50 ? 'var(--warning)' : 'var(--danger)';
+                return `
+                    <div class="item-row" style="margin-bottom: 12px;">
+                        <div class="item-info">
+                            <strong>${medal} ${c.coach}</strong>
+                            <small>${c.ventes.toFixed(2)}€ / ${coachObjective.toFixed(0)}€</small>
+                        </div>
+                        <div style="flex: 1; margin: 0 16px;">
+                            <div style="background: var(--gray-200); border-radius: 10px; height: 20px; overflow: hidden;">
+                                <div style="background: ${progressColor}; height: 100%; width: ${Math.min(100, c.progress)}%; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                        <strong style="min-width: 60px; text-align: right;">${c.progress.toFixed(0)}%</strong>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateReorderAlerts() {
+            const threshold = data.stockAlertThreshold || 3;
+            const lowStock = data.produits.filter(p => (data.stock[p.nom] || 0) <= threshold).sort((a, b) => (data.stock[a.nom] || 0) - (data.stock[b.nom] || 0));
+
+            document.getElementById('reorder-alerts').innerHTML = lowStock.length > 0 ? lowStock.map(p => {
+                const qty = data.stock[p.nom] || 0;
+                return `
+                    <div class="item-row" style="border-color: ${qty === 0 ? 'var(--danger)' : 'var(--warning)'};">
+                        <div class="item-info">
+                            <strong>${p.nom}</strong>
+                            <small>Stock: ${qty} | Prix achat: ${(data.prixAchat[p.nom] || 0).toFixed(2)}€</small>
+                        </div>
+                        <span class="stock-badge ${qty === 0 ? 'out' : 'low'}">${qty === 0 ? 'RUPTURE' : 'Stock bas'}</span>
+                    </div>
+                `;
+            }).join('') : '<p style="color:var(--success);">✓ Tous les produits sont en stock suffisant</p>';
+        }
+
+        function updateSlowRotation(productStats) {
+            const slowProducts = data.produits.filter(p => {
+                const sold = productStats[p.nom]?.sold || 0;
+                const stock = data.stock[p.nom] || 0;
+                return stock > 0 && sold < 3;
+            }).slice(0, 5);
+
+            document.getElementById('slow-rotation').innerHTML = slowProducts.length > 0 ? slowProducts.map(p => `
+                <div class="item-row">
+                    <div class="item-info">
+                        <strong>${p.nom}</strong>
+                        <small>Vendus: ${productStats[p.nom]?.sold || 0} | En stock: ${data.stock[p.nom] || 0}</small>
+                    </div>
+                </div>
+            `).join('') : '<p style="color:var(--gray-500);">Tous les produits ont une bonne rotation</p>';
+        }
+
+        function updateProfitabilityRanking(productStats) {
+            const ranked = Object.entries(productStats).map(([nom, stats]) => {
+                const margin = stats.revenue > 0 ? ((stats.revenue - stats.cost) / stats.revenue * 100) : 0;
+                return { nom, profit: stats.revenue - stats.cost, margin, sold: stats.sold };
+            }).sort((a, b) => b.profit - a.profit);
+
+            document.getElementById('top-profitable').innerHTML = ranked.slice(0, 5).map(p => `
+                <div class="item-row" style="border-color: var(--success);">
+                    <div class="item-info">
+                        <strong>${p.nom.substring(0, 25)}${p.nom.length > 25 ? '...' : ''}</strong>
+                        <small>Vendus: ${p.sold} | Marge: ${p.margin.toFixed(1)}%</small>
+                    </div>
+                    <strong style="color: var(--success);">+${p.profit.toFixed(2)}€</strong>
+                </div>
+            `).join('') || '<p style="color:var(--gray-500);">Pas de données</p>';
+
+            document.getElementById('least-profitable').innerHTML = ranked.slice(-5).reverse().map(p => `
+                <div class="item-row" style="border-color: ${p.profit < 0 ? 'var(--danger)' : 'var(--warning)'};">
+                    <div class="item-info">
+                        <strong>${p.nom.substring(0, 25)}${p.nom.length > 25 ? '...' : ''}</strong>
+                        <small>Vendus: ${p.sold} | Marge: ${p.margin.toFixed(1)}%</small>
+                    </div>
+                    <strong style="color: ${p.profit < 0 ? 'var(--danger)' : 'var(--warning)'};">${p.profit.toFixed(2)}€</strong>
+                </div>
+            `).join('') || '<p style="color:var(--gray-500);">Pas de données</p>';
+        }
+
+        function updateMarginsTable(productStats) {
             const marginsTable = document.getElementById('margins-table');
             let marginsHtml = '<tr><th>Produit</th><th>Prix achat</th><th>Prix vente</th><th>Marge</th><th>Vendus</th><th>Bénéfice</th></tr>';
 
@@ -2931,56 +3448,265 @@
                 const profit = stats.revenue - stats.cost;
                 const margeClass = margeUnit >= 30 ? 'margin-good' : margeUnit >= 15 ? 'margin-medium' : 'margin-low';
 
-                marginsHtml += `
-                    <tr>
-                        <td><strong>${nom.substring(0, 30)}${nom.length > 30 ? '...' : ''}</strong></td>
-                        <td>${prixAchat > 0 ? prixAchat.toFixed(2) + '€' : '<em style="color:var(--gray-400)">Non défini</em>'}</td>
-                        <td>${prixVente.toFixed(2)}€</td>
-                        <td><span class="margin-indicator ${margeClass}">${margeUnit.toFixed(1)}%</span></td>
-                        <td>${stats.sold}</td>
-                        <td style="font-weight:700;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit.toFixed(2)}€</td>
-                    </tr>
-                `;
+                marginsHtml += `<tr>
+                    <td><strong>${nom.substring(0, 30)}${nom.length > 30 ? '...' : ''}</strong></td>
+                    <td>${prixAchat > 0 ? prixAchat.toFixed(2) + '€' : '<em style="color:var(--gray-400)">Non défini</em>'}</td>
+                    <td>${prixVente.toFixed(2)}€</td>
+                    <td><span class="margin-indicator ${margeClass}">${margeUnit.toFixed(1)}%</span></td>
+                    <td>${stats.sold}</td>
+                    <td style="font-weight:700;color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit.toFixed(2)}€</td>
+                </tr>`;
             });
             marginsTable.innerHTML = marginsHtml;
+        }
 
-            // Coach performance
+        function updateCoachPerformanceTable() {
+            const currentMonth = document.getElementById('objective-month')?.value || mois[0];
+            const objective = (data.monthlyObjective || 0) / data.coachs.length;
             const coachTable = document.getElementById('coach-performance-table');
-            let coachHtml = '<tr><th>Coach</th><th>Ventes</th><th>Commission</th><th>Bénéfice généré</th></tr>';
+            let html = '<tr><th>Coach</th><th>Ventes</th><th>Objectif</th><th>Commission</th><th>Bénéfice généré</th><th>Statut</th></tr>';
 
             data.coachs.forEach(coach => {
-                let coachVentes = 0;
+                let coachVentes = calculerVentesCoach(currentMonth, coach);
                 let coachProfit = 0;
-
-                mois.forEach(m => {
-                    coachVentes += calculerVentesCoach(m, coach);
+                data.commandes.filter(c => c.coach === coach && c.mois === currentMonth).forEach(c => {
+                    c.produits.forEach(p => { coachProfit += (p.prixUnitaire - (data.prixAchat[p.nom] || 0)) * p.quantite; });
                 });
-
-                data.commandes.filter(c => c.coach === coach).forEach(c => {
-                    c.produits.forEach(p => {
-                        const prixAchat = data.prixAchat[p.nom] || 0;
-                        coachProfit += (p.prixUnitaire - prixAchat) * p.quantite;
-                    });
-                });
-
                 const commission = calculerCommission(coachVentes);
+                const progress = objective > 0 ? (coachVentes / objective * 100) : 0;
+                const paid = (data.commissionPayments || []).filter(p => p.coach === coach && p.month === currentMonth).reduce((sum, p) => sum + p.amount, 0);
 
-                coachHtml += `
-                    <tr>
-                        <td><strong>${coach}</strong></td>
-                        <td>${coachVentes.toFixed(2)}€</td>
-                        <td>${commission.toFixed(2)}€</td>
-                        <td style="font-weight:700;color:var(--success);">${coachProfit.toFixed(2)}€</td>
-                    </tr>
-                `;
+                html += `<tr>
+                    <td><strong>${coach}</strong></td>
+                    <td>${coachVentes.toFixed(2)}€</td>
+                    <td>${progress.toFixed(0)}%</td>
+                    <td>${commission.toFixed(2)}€ ${paid > 0 ? `<small style="color:var(--success);">(${paid.toFixed(0)}€ payé)</small>` : ''}</td>
+                    <td style="font-weight:700;color:var(--success);">${coachProfit.toFixed(2)}€</td>
+                    <td><span class="stock-badge ${progress >= 100 ? 'ok' : progress >= 50 ? 'low' : 'out'}">${progress >= 100 ? '✓ Objectif' : progress >= 50 ? 'En cours' : 'À booster'}</span></td>
+                </tr>`;
             });
-            coachTable.innerHTML = coachHtml;
+            coachTable.innerHTML = html;
+        }
 
-            // Supplier orders list
-            updateSupplierOrdersList();
+        function updateCommissionPaymentsList() {
+            const list = document.getElementById('commission-payments-list');
+            if (!list) return;
 
-            // Purchase prices
-            filterPurchasePrices();
+            const payments = (data.commissionPayments || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+            list.innerHTML = payments.length > 0 ? payments.slice(0, 20).map(p => `
+                <div class="item-row">
+                    <div class="item-info">
+                        <strong>${p.coach}</strong>
+                        <small>${p.date} - ${p.month} ${p.notes ? '| ' + p.notes : ''}</small>
+                    </div>
+                    <strong style="color: var(--success);">${p.amount.toFixed(2)}€</strong>
+                </div>
+            `).join('') : '<p style="color:var(--gray-500);">Aucun paiement enregistré</p>';
+        }
+
+        function updateActivityLog() {
+            const log = document.getElementById('activity-log');
+            if (!log) return;
+
+            const activities = (data.activityLog || []).slice(-50).reverse();
+            log.innerHTML = activities.length > 0 ? activities.map(a => `
+                <div style="padding: 8px 12px; border-bottom: 1px solid var(--gray-100); font-size: 0.85rem;">
+                    <span style="color: var(--gray-400);">${a.date}</span>
+                    <span style="margin-left: 8px;">${a.action}</span>
+                </div>
+            `).join('') : '<p style="color:var(--gray-500);">Aucune activité</p>';
+        }
+
+        function logActivity(action) {
+            if (!data.activityLog) data.activityLog = [];
+            data.activityLog.push({ date: new Date().toLocaleString('fr-FR'), action });
+            if (data.activityLog.length > 100) data.activityLog = data.activityLog.slice(-100);
+            saveData();
+        }
+
+        // Fixed costs functions
+        function showAddFixedCostModal() {
+            document.getElementById('fixed-cost-name').value = '';
+            document.getElementById('fixed-cost-amount').value = '';
+            document.getElementById('add-fixed-cost-modal').classList.add('show');
+        }
+
+        function addFixedCost() {
+            const name = document.getElementById('fixed-cost-name').value.trim();
+            const amount = parseFloat(document.getElementById('fixed-cost-amount').value) || 0;
+            if (!name || amount <= 0) { alert('Remplissez tous les champs'); return; }
+
+            if (!data.fixedCosts) data.fixedCosts = [];
+            data.fixedCosts.push({ id: generateId(), name, amount });
+            logActivity(`Ajout frais fixe: ${name} (${amount}€)`);
+            saveData();
+            closeModal('add-fixed-cost-modal');
+            updateManagerView();
+        }
+
+        function deleteFixedCost(id) {
+            const cost = data.fixedCosts.find(f => f.id === id);
+            if (cost) logActivity(`Suppression frais fixe: ${cost.name}`);
+            data.fixedCosts = data.fixedCosts.filter(f => f.id !== id);
+            saveData();
+            updateManagerView();
+        }
+
+        function saveObjective() {
+            data.monthlyObjective = parseFloat(document.getElementById('monthly-objective').value) || 0;
+            saveData();
+            updateManagerView();
+        }
+
+        // Commission payments
+        function showPayCommissionModal() {
+            document.getElementById('payment-coach').innerHTML = data.coachs.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('payment-month').innerHTML = mois.map(m => `<option value="${m}">${m}</option>`).join('');
+            document.getElementById('payment-amount').value = '';
+            document.getElementById('payment-notes').value = '';
+            document.getElementById('pay-commission-modal').classList.add('show');
+        }
+
+        function saveCommissionPayment() {
+            const coach = document.getElementById('payment-coach').value;
+            const month = document.getElementById('payment-month').value;
+            const amount = parseFloat(document.getElementById('payment-amount').value) || 0;
+            const notes = document.getElementById('payment-notes').value.trim();
+
+            if (amount <= 0) { alert('Entrez un montant'); return; }
+
+            if (!data.commissionPayments) data.commissionPayments = [];
+            data.commissionPayments.push({
+                id: generateId(),
+                coach, month, amount, notes,
+                date: new Date().toISOString().split('T')[0]
+            });
+            logActivity(`Paiement commission: ${coach} - ${amount}€ (${month})`);
+            saveData();
+            closeModal('pay-commission-modal');
+            updateManagerView();
+        }
+
+        // Password change
+        function showChangePasswordModal() {
+            document.getElementById('old-password').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('confirm-password').value = '';
+            document.getElementById('change-password-modal').classList.add('show');
+        }
+
+        function changePassword() {
+            const oldPwd = document.getElementById('old-password').value;
+            const newPwd = document.getElementById('new-password').value;
+            const confirmPwd = document.getElementById('confirm-password').value;
+
+            if (oldPwd !== data.managerPassword) { alert('Ancien mot de passe incorrect'); return; }
+            if (newPwd.length < 4) { alert('Le nouveau mot de passe doit faire au moins 4 caractères'); return; }
+            if (newPwd !== confirmPwd) { alert('Les mots de passe ne correspondent pas'); return; }
+
+            data.managerPassword = newPwd;
+            logActivity('Changement de mot de passe');
+            saveData();
+            closeModal('change-password-modal');
+            alert('Mot de passe changé avec succès !');
+        }
+
+        // Export/Import manager data
+        function exportManagerData() {
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nutripure-complet-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            logActivity('Export des données');
+        }
+
+        function importManagerData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (confirm('Remplacer TOUTES les données par les données importées ?')) {
+                        data = imported;
+                        saveData();
+                        logActivity('Import des données');
+                        location.reload();
+                    }
+                } catch (err) { alert('Fichier invalide'); }
+            };
+            reader.readAsText(file);
+        }
+
+        // Monthly report
+        function generateMonthlyReport() {
+            const currentMonth = document.getElementById('objective-month')?.value || mois[0];
+
+            let monthRevenue = 0, monthCosts = 0, monthCommissions = 0;
+            const monthCommandes = data.commandes.filter(c => c.mois === currentMonth);
+
+            monthCommandes.forEach(c => {
+                monthRevenue += c.total;
+                c.produits.forEach(p => { monthCosts += (data.prixAchat[p.nom] || 0) * p.quantite; });
+            });
+
+            data.coachs.forEach(coach => {
+                monthCommissions += calculerCommission(calculerVentesCoach(currentMonth, coach));
+            });
+
+            const fixedCosts = (data.fixedCosts || []).reduce((sum, f) => sum + f.amount, 0);
+            const tva = monthRevenue * 0.055;
+            const netProfit = monthRevenue - monthCosts - monthCommissions - fixedCosts;
+
+            document.getElementById('monthly-report-content').innerHTML = `
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h2>Rapport ${currentMonth}</h2>
+                    <p style="color: var(--gray-500);">Généré le ${new Date().toLocaleDateString('fr-FR')}</p>
+                </div>
+
+                <div class="stats-grid" style="margin-bottom: 24px;">
+                    <div class="stat-card highlight"><div class="stat-value">${monthRevenue.toFixed(2)}€</div><div class="stat-label">Chiffre d'affaires</div></div>
+                    <div class="stat-card"><div class="stat-value">${monthCommandes.length}</div><div class="stat-label">Commandes</div></div>
+                    <div class="stat-card"><div class="stat-value">${netProfit.toFixed(2)}€</div><div class="stat-label">Bénéfice net</div></div>
+                </div>
+
+                <h4 style="margin-bottom: 12px;">Détail des charges</h4>
+                <table style="width: 100%; margin-bottom: 24px;">
+                    <tr><td>Coût des produits</td><td style="text-align:right;font-weight:700;">-${monthCosts.toFixed(2)}€</td></tr>
+                    <tr><td>Commissions coachs</td><td style="text-align:right;font-weight:700;">-${monthCommissions.toFixed(2)}€</td></tr>
+                    <tr><td>Frais fixes</td><td style="text-align:right;font-weight:700;">-${fixedCosts.toFixed(2)}€</td></tr>
+                    <tr><td>TVA (5.5%)</td><td style="text-align:right;font-weight:700;">-${tva.toFixed(2)}€</td></tr>
+                    <tr style="border-top: 2px solid var(--gray-300);"><td><strong>BÉNÉFICE NET</strong></td><td style="text-align:right;font-weight:700;color:${netProfit >= 0 ? 'var(--success)' : 'var(--danger)'};">${netProfit.toFixed(2)}€</td></tr>
+                </table>
+
+                <h4 style="margin-bottom: 12px;">Performance des coachs</h4>
+                <table style="width: 100%;">
+                    <tr><th>Coach</th><th>Ventes</th><th>Commission</th></tr>
+                    ${data.coachs.map(coach => {
+                        const ventes = calculerVentesCoach(currentMonth, coach);
+                        const com = calculerCommission(ventes);
+                        return `<tr><td>${coach}</td><td>${ventes.toFixed(2)}€</td><td>${com.toFixed(2)}€</td></tr>`;
+                    }).join('')}
+                </table>
+            `;
+            document.getElementById('monthly-report-modal').classList.add('show');
+        }
+
+        function printReport() {
+            const content = document.getElementById('monthly-report-content').innerHTML;
+            const win = window.open('', '_blank');
+            win.document.write(`<html><head><title>Rapport</title><style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{padding:8px;border:1px solid #ddd;}.stat-card{display:inline-block;padding:16px;margin:8px;background:#f5f5f5;border-radius:8px;text-align:center;}.stat-value{font-size:1.5rem;font-weight:bold;}.stat-label{font-size:0.8rem;color:#666;}</style></head><body>${content}</body></html>`);
+            win.document.close();
+            win.print();
+        }
+
+        function downloadReportPDF() {
+            alert('Pour télécharger en PDF, utilisez la fonction "Imprimer" et sélectionnez "Enregistrer en PDF"');
+            printReport();
         }
 
         function filterPurchasePrices() {
