@@ -432,6 +432,30 @@
         .points-history-amount.used { color: var(--danger); }
         .points-history-amount.earned { color: var(--success); }
 
+        /* Stock system */
+        .stock-bar { background: var(--gray-100); padding: 16px 24px; border-radius: var(--radius-lg); margin-bottom: 20px; }
+        .stock-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+        .stock-title { font-size: 1.1rem; font-weight: 700; color: var(--gray-800); display: flex; align-items: center; gap: 8px; }
+        .stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; max-height: 200px; overflow-y: auto; }
+        .stock-item { background: white; padding: 12px; border-radius: var(--radius); border: 2px solid var(--gray-200); text-align: center; transition: all 0.2s; cursor: pointer; }
+        .stock-item:hover { border-color: var(--primary); }
+        .stock-item.low { border-color: var(--warning); background: #fffbeb; }
+        .stock-item.out { border-color: var(--danger); background: #fef2f2; }
+        .stock-item-name { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .stock-item-qty { font-size: 1.5rem; font-weight: 800; color: var(--gray-800); }
+        .stock-item.low .stock-item-qty { color: var(--warning); }
+        .stock-item.out .stock-item-qty { color: var(--danger); }
+        .stock-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
+        .stock-badge.ok { background: #ecfdf5; color: #059669; }
+        .stock-badge.low { background: #fffbeb; color: #d97706; }
+        .stock-badge.out { background: #fef2f2; color: #dc2626; }
+        .stock-alert { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 2px solid var(--danger); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+        .stock-alert-icon { font-size: 1.5rem; }
+        .stock-alert-text { flex: 1; }
+        .stock-alert-title { font-weight: 700; color: var(--danger); }
+        .stock-alert-list { font-size: 0.85rem; color: var(--gray-600); }
+        .stock-toggle { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; }
+
         .commande-total { font-size: 1.1rem; font-weight: 700; }
         .commande-points { color: var(--success); font-weight: 600; }
 
@@ -674,6 +698,25 @@
             </div>
         </header>
 
+        <!-- Stock Alert -->
+        <div id="stock-alert" class="stock-alert hidden">
+            <div class="stock-alert-icon">⚠️</div>
+            <div class="stock-alert-text">
+                <div class="stock-alert-title">Stock bas !</div>
+                <div class="stock-alert-list" id="stock-alert-list"></div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showReassortModal()">Réassort</button>
+        </div>
+
+        <!-- Stock Bar -->
+        <div class="card stock-bar">
+            <div class="stock-header">
+                <div class="stock-title">📦 Stock des Compléments <button class="stock-toggle" onclick="toggleStockDisplay()" id="stock-toggle-btn">▼</button></div>
+                <button class="btn btn-success btn-sm" onclick="showReassortModal()">+ Réassort</button>
+            </div>
+            <div class="stock-grid" id="stock-grid"></div>
+        </div>
+
         <!-- Vue Saisie -->
         <div id="saisie-view">
             <div class="card">
@@ -874,6 +917,26 @@
                     Exemple : 100€ d'achat = 100 points = 5€ de réduction
                 </p>
             </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><div class="card-title-icon">📦</div> Gestion du Stock</div>
+                    <button class="btn btn-success btn-sm" onclick="showReassortModal()">+ Réassort</button>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Seuil d'alerte stock bas</label>
+                        <input type="number" id="stock-threshold" class="form-control" value="3" min="1" onchange="updateStockThreshold()">
+                    </div>
+                    <div class="form-group">
+                        <label>Total produits en stock</label>
+                        <div class="stat-card" style="padding: 12px;">
+                            <span id="total-stock-count" style="font-size: 1.5rem; font-weight: 700;">0</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" onclick="resetAllStock()">Remettre tout le stock à 0</button>
+            </div>
         </div>
     </div>
 
@@ -1034,6 +1097,44 @@
         </div>
     </div>
 
+    <!-- Modal Réassort Stock -->
+    <div id="reassort-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>📦 Réassort du Stock</h2>
+                <button class="modal-close" onclick="closeModal('reassort-modal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info" style="margin-bottom: 16px;">
+                    Entrez les quantités reçues pour chaque produit. Les stocks seront ajoutés aux quantités existantes.
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label>Coach effectuant le réassort</label>
+                    <select id="reassort-coach" class="form-control"></select>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <input type="text" id="reassort-search" class="form-control" placeholder="Rechercher un produit..." oninput="filterReassortProducts()">
+                </div>
+                <div class="item-list" id="reassort-list" style="max-height: 400px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('reassort-modal')">Annuler</button>
+                <button class="btn btn-success" onclick="saveReassort()">Valider le réassort</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Historique Stock -->
+    <div id="stock-history-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>📋 Historique du Stock</h2>
+                <button class="modal-close" onclick="closeModal('stock-history-modal')">×</button>
+            </div>
+            <div class="modal-body" id="stock-history-content"></div>
+        </div>
+    </div>
+
     <script>
         const mois = ["Septembre", "Octobre", "Novembre", "Décembre", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août"];
 
@@ -1081,6 +1182,12 @@
         if (!data.commandes) data.commandes = [];
         if (!data.fidelite) data.fidelite = { pointsParEuro: 1, valeurPoint: 0.05 };
         if (!data.pointsHistory) data.pointsHistory = [];
+        if (!data.stock) {
+            data.stock = {};
+            data.produits.forEach(p => { data.stock[p.nom] = 0; });
+        }
+        if (!data.stockHistory) data.stockHistory = [];
+        if (!data.stockAlertThreshold) data.stockAlertThreshold = 3;
 
         // Panier / Cart state
         let cart = { clientId: null, items: {}, step: 'client' };
@@ -1219,11 +1326,13 @@
                 const quantite = data.ventes[moisActuel]?.[coachActuel]?.[produit.nom] || 0;
                 const prix = getPrixProduit(produit.nom, moisActuel);
                 const montant = quantite * prix;
+                const stock = data.stock?.[produit.nom] || 0;
+                const stockClass = stock <= 0 ? 'out' : stock <= (data.stockAlertThreshold || 3) ? 'low' : 'ok';
 
                 return `
                     <div class="product-item ${quantite > 0 ? 'has-quantity' : ''}">
                         <div class="product-info">
-                            <div class="product-name">${produit.nom}</div>
+                            <div class="product-name">${produit.nom} <span class="stock-badge ${stockClass}" style="margin-left:8px;">${stock} en stock</span></div>
                             <div class="product-price">${prix.toFixed(2)}€ / unité</div>
                             ${montant > 0 ? `<div class="product-total">Total: ${montant.toFixed(2)}€</div>` : ''}
                         </div>
@@ -1381,6 +1490,19 @@
             const items = Object.entries(cart.items).filter(([, v]) => v.quantite > 0);
             if (items.length === 0) { alert('Ajoutez au moins un produit'); return; }
 
+            // Vérifier le stock
+            const stockIssues = [];
+            items.forEach(([nom, item]) => {
+                const stockDispo = data.stock[nom] || 0;
+                if (item.quantite > stockDispo) {
+                    stockIssues.push(`${nom}: ${stockDispo} en stock, ${item.quantite} demandé`);
+                }
+            });
+
+            if (stockIssues.length > 0) {
+                if (!confirm(`⚠️ Stock insuffisant :\n${stockIssues.join('\n')}\n\nContinuer quand même ?`)) return;
+            }
+
             const moisActuel = document.getElementById('mois-select').value;
             const coachActuel = document.getElementById('coach-select').value;
 
@@ -1411,11 +1533,27 @@
                 if (!data.ventes[moisActuel]) data.ventes[moisActuel] = {};
                 if (!data.ventes[moisActuel][coachActuel]) data.ventes[moisActuel][coachActuel] = {};
                 data.ventes[moisActuel][coachActuel][p.nom] = (data.ventes[moisActuel][coachActuel][p.nom] || 0) + p.quantite;
+
+                // Décrémenter le stock
+                if (!data.stock[p.nom]) data.stock[p.nom] = 0;
+                data.stock[p.nom] = Math.max(0, data.stock[p.nom] - p.quantite);
+
+                // Historique stock
+                data.stockHistory.push({
+                    id: generateId(),
+                    produit: p.nom,
+                    type: 'vente',
+                    quantite: -p.quantite,
+                    coach: coachActuel,
+                    date: new Date().toISOString().split('T')[0],
+                    commandeId: newCommande.id
+                });
             });
 
             saveData();
             closeModal('cart-modal');
             updateView();
+            updateStockDisplay();
 
             const clientName = adherent ? `${adherent.prenom} ${adherent.nom}` : 'Client';
             alert(`Commande validée pour ${clientName} !\nTotal: ${total.toFixed(2)}€\n+${pointsGagnes} points de fidélité`);
@@ -1931,6 +2069,11 @@
                 </div>
             `).join('');
 
+            // Stock settings
+            document.getElementById('stock-threshold').value = data.stockAlertThreshold || 3;
+            const totalStock = Object.values(data.stock || {}).reduce((sum, qty) => sum + qty, 0);
+            document.getElementById('total-stock-count').textContent = totalStock;
+
             updatePriceList();
         }
 
@@ -2192,16 +2335,31 @@
         }
 
         function deleteCommande(commandeId) {
-            if (!confirm('Supprimer cette commande ? Les points seront retirés au client.')) return;
+            if (!confirm('Supprimer cette commande ? Les points seront retirés au client et le stock sera restauré.')) return;
 
             const commande = data.commandes.find(c => c.id === commandeId);
             if (!commande) return;
 
-            // Remove from ventes
+            // Remove from ventes and restore stock
             commande.produits.forEach(p => {
                 if (data.ventes[commande.mois]?.[commande.coach]) {
                     data.ventes[commande.mois][commande.coach][p.nom] = Math.max(0, (data.ventes[commande.mois][commande.coach][p.nom] || 0) - p.quantite);
                 }
+
+                // Restaurer le stock
+                if (!data.stock[p.nom]) data.stock[p.nom] = 0;
+                data.stock[p.nom] += p.quantite;
+
+                // Historique
+                data.stockHistory.push({
+                    id: generateId(),
+                    produit: p.nom,
+                    type: 'annulation',
+                    quantite: p.quantite,
+                    coach: commande.coach,
+                    date: new Date().toISOString().split('T')[0],
+                    commandeId: commandeId
+                });
             });
 
             // Remove points from adherent
@@ -2211,7 +2369,8 @@
             data.commandes = data.commandes.filter(c => c.id !== commandeId);
             saveData();
             filterCommandes();
-            alert('Commande supprimée');
+            updateStockDisplay();
+            alert('Commande supprimée, stock restauré');
         }
 
         // ========== GLOBAL SEARCH ==========
@@ -2356,11 +2515,201 @@
             return data.pointsHistory.filter(h => h.adherentId === adherentId).sort((a, b) => new Date(b.date) - new Date(a.date));
         }
 
+        // ========== STOCK MANAGEMENT ==========
+        let stockDisplayVisible = true;
+
+        function updateStockDisplay() {
+            if (!data.stock) {
+                data.stock = {};
+                data.produits.forEach(p => { data.stock[p.nom] = 0; });
+            }
+
+            // Ensure all products have stock entry
+            data.produits.forEach(p => {
+                if (data.stock[p.nom] === undefined) data.stock[p.nom] = 0;
+            });
+
+            const stockGrid = document.getElementById('stock-grid');
+            if (!stockGrid) return;
+
+            stockGrid.innerHTML = data.produits.map(p => {
+                const qty = data.stock[p.nom] || 0;
+                const stockClass = getStockClass(qty);
+                return `
+                    <div class="stock-item ${stockClass}" onclick="showProductStockHistory('${p.nom.replace(/'/g, "\\'")}')">
+                        <div class="stock-item-name" title="${p.nom}">${p.nom.length > 20 ? p.nom.substring(0, 18) + '...' : p.nom}</div>
+                        <div class="stock-item-qty">${qty}</div>
+                        <span class="stock-badge ${stockClass}">${stockClass === 'out' ? 'Rupture' : stockClass === 'low' ? 'Bas' : 'OK'}</span>
+                    </div>
+                `;
+            }).join('');
+
+            stockGrid.style.display = stockDisplayVisible ? 'grid' : 'none';
+            document.getElementById('stock-toggle-btn').textContent = stockDisplayVisible ? '▼' : '▶';
+
+            checkStockAlerts();
+        }
+
+        function toggleStockDisplay() {
+            stockDisplayVisible = !stockDisplayVisible;
+            updateStockDisplay();
+        }
+
+        function getStockClass(qty) {
+            const threshold = data.stockAlertThreshold || 3;
+            if (qty <= 0) return 'out';
+            if (qty <= threshold) return 'low';
+            return 'ok';
+        }
+
+        function checkStockAlerts() {
+            const threshold = data.stockAlertThreshold || 3;
+            const lowStock = data.produits.filter(p => (data.stock[p.nom] || 0) <= threshold);
+            const alertDiv = document.getElementById('stock-alert');
+            const alertList = document.getElementById('stock-alert-list');
+
+            if (lowStock.length > 0) {
+                const outOfStock = lowStock.filter(p => (data.stock[p.nom] || 0) === 0);
+                const lowItems = lowStock.filter(p => (data.stock[p.nom] || 0) > 0);
+
+                let text = '';
+                if (outOfStock.length > 0) text += `🔴 Rupture: ${outOfStock.map(p => p.nom).slice(0, 3).join(', ')}${outOfStock.length > 3 ? ` (+${outOfStock.length - 3})` : ''} `;
+                if (lowItems.length > 0) text += `🟠 Stock bas: ${lowItems.map(p => p.nom).slice(0, 3).join(', ')}${lowItems.length > 3 ? ` (+${lowItems.length - 3})` : ''}`;
+
+                alertList.textContent = text;
+                alertDiv.classList.remove('hidden');
+            } else {
+                alertDiv.classList.add('hidden');
+            }
+        }
+
+        function showReassortModal() {
+            document.getElementById('reassort-coach').innerHTML = data.coachs.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('reassort-search').value = '';
+            filterReassortProducts();
+            document.getElementById('reassort-modal').classList.add('show');
+        }
+
+        function filterReassortProducts() {
+            const search = document.getElementById('reassort-search').value.toLowerCase();
+            const filtered = data.produits.filter(p => p.nom.toLowerCase().includes(search));
+
+            document.getElementById('reassort-list').innerHTML = filtered.map(p => {
+                const currentStock = data.stock[p.nom] || 0;
+                const stockClass = getStockClass(currentStock);
+                return `
+                    <div class="item-row">
+                        <div class="item-info">
+                            <strong>${p.nom}</strong>
+                            <small>Stock actuel: <span class="stock-badge ${stockClass}">${currentStock}</span></small>
+                        </div>
+                        <div class="item-actions">
+                            <input type="number" class="quantity-input" id="reassort-${p.nom.replace(/[^a-zA-Z0-9]/g, '_')}" value="0" min="0" placeholder="+0" style="width: 80px;">
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function saveReassort() {
+            const coach = document.getElementById('reassort-coach').value;
+            const date = new Date().toISOString().split('T')[0];
+            let hasChanges = false;
+            let addedProducts = [];
+
+            data.produits.forEach(p => {
+                const inputId = `reassort-${p.nom.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const input = document.getElementById(inputId);
+                if (!input) return;
+
+                const qty = parseInt(input.value) || 0;
+                if (qty > 0) {
+                    hasChanges = true;
+                    if (!data.stock[p.nom]) data.stock[p.nom] = 0;
+                    data.stock[p.nom] += qty;
+                    addedProducts.push(`${p.nom}: +${qty}`);
+
+                    // Historique
+                    if (!data.stockHistory) data.stockHistory = [];
+                    data.stockHistory.push({
+                        id: generateId(),
+                        produit: p.nom,
+                        type: 'reassort',
+                        quantite: qty,
+                        coach: coach,
+                        date: date
+                    });
+                }
+            });
+
+            if (!hasChanges) {
+                alert('Aucune quantité saisie');
+                return;
+            }
+
+            saveData();
+            closeModal('reassort-modal');
+            updateStockDisplay();
+            alert(`Réassort effectué par ${coach} :\n${addedProducts.join('\n')}`);
+        }
+
+        function updateStockThreshold() {
+            data.stockAlertThreshold = parseInt(document.getElementById('stock-threshold').value) || 3;
+            saveData();
+            updateStockDisplay();
+        }
+
+        function resetAllStock() {
+            if (!confirm('Remettre tout le stock à 0 ? Cette action est irréversible.')) return;
+            data.produits.forEach(p => { data.stock[p.nom] = 0; });
+            data.stockHistory.push({
+                id: generateId(),
+                produit: 'TOUS',
+                type: 'reset',
+                quantite: 0,
+                coach: 'Système',
+                date: new Date().toISOString().split('T')[0]
+            });
+            saveData();
+            updateStockDisplay();
+            alert('Stock remis à zéro');
+        }
+
+        function showProductStockHistory(productName) {
+            const history = (data.stockHistory || []).filter(h => h.produit === productName).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20);
+            const currentStock = data.stock[productName] || 0;
+
+            document.getElementById('stock-history-content').innerHTML = `
+                <div class="alert alert-info" style="margin-bottom: 16px;">
+                    <strong>${productName}</strong> - Stock actuel: <span class="stock-badge ${getStockClass(currentStock)}">${currentStock}</span>
+                </div>
+                ${history.length > 0 ? `
+                    <div class="table-container">
+                        <table>
+                            <tr><th>Date</th><th>Type</th><th>Quantité</th><th>Coach</th></tr>
+                            ${history.map(h => `
+                                <tr>
+                                    <td>${h.date}</td>
+                                    <td>${h.type === 'reassort' ? '📦 Réassort' : '🛒 Vente'}</td>
+                                    <td style="color: ${h.quantite > 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700;">
+                                        ${h.quantite > 0 ? '+' : ''}${h.quantite}
+                                    </td>
+                                    <td>${h.coach}</td>
+                                </tr>
+                            `).join('')}
+                        </table>
+                    </div>
+                ` : '<p style="text-align:center;color:var(--gray-500);">Aucun historique</p>'}
+            `;
+            document.getElementById('stock-history-modal').classList.add('show');
+        }
+
         window.onclick = e => { if (e.target.classList.contains('modal')) e.target.classList.remove('show'); };
 
         initData();
         populateSelects();
         updateView();
+        updateStockDisplay();
     </script>
 </body>
 </html>
