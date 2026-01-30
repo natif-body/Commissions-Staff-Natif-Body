@@ -6,7 +6,8 @@
     <title>NutriPure - Gestion des Commissions</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"></script>
     <style>
         :root {
             --primary: #E31E24;
@@ -3860,13 +3861,16 @@
         }
 
         // Configuration PDF.js
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        }
 
         async function handlePDFUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            if (file.type !== 'application/pdf') {
+            // Vérification plus souple du type de fichier
+            if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
                 alert('Veuillez sélectionner un fichier PDF');
                 return;
             }
@@ -3879,18 +3883,38 @@
 
         async function processPDFFile(file) {
             // Show loading
-            document.getElementById('pdf-loading').classList.remove('hidden');
+            const loadingEl = document.getElementById('pdf-loading');
+            if (loadingEl) loadingEl.classList.remove('hidden');
 
             try {
+                // Vérifier que PDF.js est chargé
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('La librairie PDF.js n\'est pas chargée. Vérifiez votre connexion internet.');
+                }
+
                 const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                console.log('PDF chargé, taille:', arrayBuffer.byteLength, 'octets');
+
+                // Charger le document PDF
+                const loadingTask = pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    useWorkerFetch: false,
+                    isEvalSupported: false,
+                    useSystemFonts: true
+                });
+
+                const pdf = await loadingTask.promise;
+                console.log('PDF ouvert, nombre de pages:', pdf.numPages);
 
                 let fullText = '';
 
                 // Extract text from all pages
                 for (let i = 1; i <= pdf.numPages; i++) {
+                    console.log('Lecture page', i);
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
+
+                    console.log('Page', i, '- éléments texte:', textContent.items.length);
 
                     // Reconstruct text with positioning info
                     let lastY = null;
@@ -3908,16 +3932,32 @@
                     fullText += lineText + '\n';
                 }
 
+                console.log('Texte extrait total:', fullText.length, 'caractères');
+                console.log('Aperçu du texte:', fullText.substring(0, 500));
+
                 // Hide loading
-                document.getElementById('pdf-loading').classList.add('hidden');
+                if (loadingEl) loadingEl.classList.add('hidden');
+
+                if (fullText.trim().length === 0) {
+                    alert('Le PDF ne contient pas de texte extractible. Il s\'agit peut-être d\'un PDF scanné (image). Utilisez la saisie manuelle.');
+                    showManualOrderEntry();
+                    return;
+                }
 
                 // Parse the extracted text
                 parsePDFContent(fullText);
 
             } catch (error) {
-                document.getElementById('pdf-loading').classList.add('hidden');
-                console.error('Erreur PDF:', error);
-                alert('Erreur lors de la lecture du PDF. Essayez la saisie manuelle.');
+                if (loadingEl) loadingEl.classList.add('hidden');
+                console.error('Erreur PDF détaillée:', error);
+                console.error('Stack:', error.stack);
+
+                let errorMsg = 'Erreur lors de la lecture du PDF:\n';
+                if (error.message) {
+                    errorMsg += error.message + '\n\n';
+                }
+                errorMsg += 'Utilisez la saisie manuelle ou ouvrez la console (F12) pour plus de détails.';
+                alert(errorMsg);
                 showManualOrderEntry();
             }
         }
