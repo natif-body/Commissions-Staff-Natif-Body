@@ -3963,96 +3963,131 @@
         }
 
         function parsePDFContent(text) {
-            console.log('Texte extrait du PDF:', text); // Pour debug
+            console.log('=== TEXTE EXTRAIT DU PDF ===');
+            console.log(text);
+            console.log('=== FIN DU TEXTE ===');
 
             const lines = text.split('\n').filter(l => l.trim());
             const products = [];
             let totalHT = 0;
 
-            // Patterns spécifiques pour les PDFs Nutripure
-            // Format attendu: REF | Produit | TVA | Prix base | Prix unit HT | Qté | Total HT
+            // Essayer plusieurs méthodes de parsing
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
 
-                // Skip header lines and empty lines
-                if (line.includes('Référence') || line.includes('Produit') ||
-                    line.includes('Total HT') && !line.match(/\d+[,.]?\d*\s*€/) ||
-                    line.length < 5) continue;
+                // Skip lignes trop courtes ou headers
+                if (line.length < 3) continue;
+                if (/^(Référence|Produit|Article|Désignation|TVA|Total|Sous-total|Page|Date|N°|Commande)/i.test(line)) continue;
 
-                // Pattern 1: Try to match lines with NUTRI_ references
-                const nutriMatch = line.match(/^(NUTRI_[A-Z0-9_]+)\s+(.+?)(?:\s+5,50?\s*%|\s+\d+[,.]?\d*\s*€)/i);
+                // Chercher les prix (avec ou sans €)
+                const pricesWithEuro = [...line.matchAll(/(\d+)[,.](\d{2})\s*€/g)].map(m => parseFloat(m[1] + '.' + m[2]));
+                const pricesNoEuro = [...line.matchAll(/(\d+)[,.](\d{2})(?!\d)/g)].map(m => parseFloat(m[1] + '.' + m[2]));
+                const prices = pricesWithEuro.length > 0 ? pricesWithEuro : pricesNoEuro;
 
-                // Pattern 2: General line with multiple prices
-                const pricePattern = /(\d+[,.]?\d*)\s*€/g;
-                const prices = [...line.matchAll(pricePattern)].map(m => parseFloat(m[1].replace(',', '.')));
+                // Chercher les quantités (nombre entier isolé, généralement 1-99)
+                const qtyMatches = [...line.matchAll(/(?:^|\s)(\d{1,2})(?:\s|$)/g)].map(m => parseInt(m[1]));
+                const qty = qtyMatches.find(q => q >= 1 && q <= 50) || 1;
 
-                // Pattern 3: Look for quantity - often standalone number near the end
-                const qtyMatch = line.match(/(\d+)\s*(?:\d+[,.]?\d*\s*€\s*)?$/);
-                const qtyInMiddle = line.match(/€\s*(\d+)\s+\d+[,.]?\d*\s*€/);
+                // Chercher une référence NUTRI_
+                const refMatch = line.match(/(NUTRI_[A-Z0-9_]+)/i);
 
-                if (prices.length >= 2) {
-                    let productName = '';
-                    let reference = '';
-                    let qty = 1;
-                    let unitPrice = 0;
-                    let lineTotal = 0;
+                // Extraire le nom du produit
+                let productName = '';
 
-                    // Extract reference and product name
-                    if (nutriMatch) {
-                        reference = nutriMatch[1];
-                        productName = nutriMatch[2].trim();
-                    } else {
-                        // Try to get product name from the beginning of line
-                        const nameMatch = line.match(/^([A-Za-zÀ-ÿ\s\-\.]+?)(?:\s+5,50?\s*%|\s+\d)/);
-                        if (nameMatch) productName = nameMatch[1].trim();
+                // Méthode 1: Après la référence NUTRI_
+                if (refMatch) {
+                    const afterRef = line.substring(line.indexOf(refMatch[1]) + refMatch[1].length).trim();
+                    const nameMatch = afterRef.match(/^([A-Za-zÀ-ÿ\s\-\.'°%0-9]+?)(?:\s+\d|$)/);
+                    if (nameMatch) productName = nameMatch[1].trim();
+                }
+
+                // Méthode 2: Texte au début de la ligne (avant les chiffres)
+                if (!productName) {
+                    const nameMatch = line.match(/^([A-Za-zÀ-ÿ\s\-\.'°%]+)(?=\s+\d)/);
+                    if (nameMatch && nameMatch[1].length > 3) productName = nameMatch[1].trim();
+                }
+
+                // Méthode 3: Chercher des mots clés de produits Nutripure
+                if (!productName) {
+                    const keywords = ['Whey', 'Isolat', 'Caséine', 'Créatine', 'BCAA', 'Omega', 'Oméga', 'Vitamine',
+                                     'Magnésium', 'Zinc', 'Collagène', 'Protéine', 'Gainer', 'Pre-workout', 'Spiruline',
+                                     'Ashwagandha', 'Multivitamin', 'Detox', 'Minceur', 'Brûleur', 'Shaker'];
+                    for (const kw of keywords) {
+                        if (line.toLowerCase().includes(kw.toLowerCase())) {
+                            // Extraire le contexte autour du mot clé
+                            const kwIndex = line.toLowerCase().indexOf(kw.toLowerCase());
+                            const start = Math.max(0, line.lastIndexOf(' ', kwIndex - 1) + 1);
+                            let end = line.indexOf('  ', kwIndex);
+                            if (end === -1) end = line.search(/\d{2}[,.]\d{2}/);
+                            if (end === -1) end = line.length;
+                            productName = line.substring(start, end).trim();
+                            break;
+                        }
                     }
+                }
 
-                    // Extract quantity
-                    if (qtyInMiddle) {
-                        qty = parseInt(qtyInMiddle[1]);
-                    } else if (qtyMatch && parseInt(qtyMatch[1]) < 100) {
-                        qty = parseInt(qtyMatch[1]);
-                    }
+                // Si on a des prix et un nom de produit
+                if (prices.length >= 1 && productName && productName.length > 2) {
+                    // Prix unitaire = avant-dernier ou premier prix
+                    // Total = dernier prix
+                    let unitPrice = prices.length >= 2 ? prices[prices.length - 2] : prices[0];
+                    let lineTotal = prices[prices.length - 1];
 
-                    // For Nutripure PDFs: Unit price is before quantity, total is after
-                    // Typical order: base_price, unit_price, qty, total
-                    if (prices.length >= 3) {
-                        // Usually: [base_price, unit_price, total] or with qty
-                        unitPrice = prices[prices.length - 2] || prices[1];
-                        lineTotal = prices[prices.length - 1];
-                    } else {
+                    // Vérification: si total < unitPrice, inverser
+                    if (lineTotal < unitPrice && prices.length >= 2) {
                         unitPrice = prices[0];
-                        lineTotal = prices[1];
+                        lineTotal = prices[prices.length - 1];
                     }
 
-                    // Match with existing products in the database
-                    if (productName && unitPrice > 0) {
-                        // Try to find a matching product in our database
-                        const matchedProduct = findMatchingProduct(productName);
+                    const matchedProduct = findMatchingProduct(productName);
 
-                        products.push({
-                            reference: reference,
-                            nom: matchedProduct || productName,
-                            nomOriginal: productName,
-                            prixUnitaireHT: unitPrice,
-                            quantite: qty > 0 ? qty : 1,
-                            totalHT: lineTotal || (unitPrice * qty),
-                            matched: !!matchedProduct
-                        });
-                        totalHT += lineTotal || (unitPrice * qty);
-                    }
+                    products.push({
+                        reference: refMatch ? refMatch[1] : '',
+                        nom: matchedProduct || productName,
+                        nomOriginal: productName,
+                        prixUnitaireHT: unitPrice,
+                        quantite: qty,
+                        totalHT: lineTotal || (unitPrice * qty),
+                        matched: !!matchedProduct
+                    });
+                    totalHT += lineTotal || (unitPrice * qty);
+
+                    console.log('Produit trouvé:', productName, '- Prix:', unitPrice, '€ - Qté:', qty);
                 }
             }
 
+            // Si aucun produit trouvé, afficher le texte brut pour debug
             if (products.length === 0) {
-                alert('Aucun produit détecté dans le PDF. Utilisez la saisie manuelle.');
-                showManualOrderEntry();
+                showRawTextForDebug(text);
                 return;
             }
 
             parsedOrderData = { products, totalHT, date: new Date().toISOString().split('T')[0] };
             showParsedOrderPreviewPDF();
+        }
+
+        function showRawTextForDebug(text) {
+            const preview = document.getElementById('parsed-order-preview');
+            preview.classList.remove('hidden');
+            preview.innerHTML = `
+                <div class="alert alert-warning">
+                    <strong>⚠️ Aucun produit détecté automatiquement</strong><br>
+                    Le format du PDF n'a pas été reconnu. Voici le texte extrait :
+                </div>
+                <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0; max-height: 300px; overflow-y: auto;">
+                    <pre style="white-space: pre-wrap; font-size: 12px; margin: 0;">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                </div>
+                <p style="color: var(--gray-600); margin-bottom: 16px;">
+                    Copiez ce texte et partagez-le pour améliorer la détection, ou utilisez la saisie manuelle ci-dessous.
+                </p>
+                <button class="btn btn-primary" onclick="navigator.clipboard.writeText(\`${text.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`); alert('Texte copié!');">
+                    📋 Copier le texte
+                </button>
+                <button class="btn btn-secondary" onclick="showManualOrderEntry()" style="margin-left: 12px;">
+                    Saisie manuelle
+                </button>
+            `;
         }
 
         function findMatchingProduct(pdfProductName) {
