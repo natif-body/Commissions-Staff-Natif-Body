@@ -3896,7 +3896,30 @@
 
                 // Skip lignes trop courtes ou headers
                 if (line.length < 3) continue;
-                if (/^(Référence|Produit|Article|Désignation|TVA|Total|Sous-total|Page|Date|N°|Commande)/i.test(line)) continue;
+
+                // Exclure les lignes de total, TVA, sous-total, headers, etc.
+                const excludePatterns = [
+                    /^(Référence|Produit|Article|Désignation|Page|Date|N°|Commande|Facture|Client|Adresse|Téléphone|Email|SIRET|Code postal)/i,
+                    /^(Total|Sous-total|Sous total|Montant|Net à payer|TVA|T\.V\.A|Taxe|Remise|Réduction|Escompte|Acompte|Reste)/i,
+                    /^(HT|TTC|€|EUR|Livraison|Frais|Port|Expédition|Franco)/i,
+                    /(Total\s*(HT|TTC|général|commande|facture))/i,
+                    /(Sous[- ]?total)/i,
+                    /(Montant\s*(HT|TTC|total|TVA))/i,
+                    /(TVA\s*\d+[,.]?\d*\s*%)/i,
+                    /^(\d+[,.]?\d*\s*%\s*$)/,  // Lignes qui sont juste un pourcentage
+                    /(Base\s*HT|Taux|5[,.]5\s*%|20\s*%|10\s*%)/i,
+                    /^\s*\d+[,.]?\d*\s*€?\s*$/  // Lignes qui sont juste un prix
+                ];
+
+                let shouldSkip = false;
+                for (const pattern of excludePatterns) {
+                    if (pattern.test(line)) {
+                        shouldSkip = true;
+                        console.log('Ligne exclue (pattern):', line);
+                        break;
+                    }
+                }
+                if (shouldSkip) continue;
 
                 // Chercher les prix (avec ou sans €)
                 const pricesWithEuro = [...line.matchAll(/(\d+)[,.](\d{2})\s*€/g)].map(m => parseFloat(m[1] + '.' + m[2]));
@@ -3947,6 +3970,16 @@
 
                 // Si on a des prix et un nom de produit
                 if (prices.length >= 1 && productName && productName.length > 2) {
+
+                    // Vérifier que le nom n'est pas un total/TVA/sous-total
+                    const invalidNames = ['total', 'tva', 'taxe', 'sous-total', 'sous total', 'montant',
+                                         'ht', 'ttc', 'remise', 'port', 'livraison', 'frais', 'net'];
+                    const nameLower = productName.toLowerCase().trim();
+                    if (invalidNames.some(inv => nameLower === inv || nameLower.startsWith(inv + ' '))) {
+                        console.log('Nom invalide exclu:', productName);
+                        continue;
+                    }
+
                     // Prix unitaire = avant-dernier ou premier prix
                     // Total = dernier prix
                     let unitPrice = prices.length >= 2 ? prices[prices.length - 2] : prices[0];
@@ -3956,6 +3989,12 @@
                     if (lineTotal < unitPrice && prices.length >= 2) {
                         unitPrice = prices[0];
                         lineTotal = prices[prices.length - 1];
+                    }
+
+                    // Exclure les prix trop élevés qui sont probablement des totaux généraux
+                    if (lineTotal > 500 && prices.length <= 2) {
+                        console.log('Prix trop élevé, probablement un total:', line);
+                        continue;
                     }
 
                     const matchedProduct = findMatchingProduct(productName);
