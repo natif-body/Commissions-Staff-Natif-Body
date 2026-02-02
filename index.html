@@ -434,29 +434,11 @@
         .points-history-amount.used { color: var(--danger); }
         .points-history-amount.earned { color: var(--success); }
 
-        /* Stock system */
-        .stock-bar { background: var(--gray-100); padding: 16px 24px; border-radius: var(--radius-lg); margin-bottom: 20px; }
-        .stock-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
-        .stock-title { font-size: 1.1rem; font-weight: 700; color: var(--gray-800); display: flex; align-items: center; gap: 8px; }
-        .stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; max-height: 200px; overflow-y: auto; }
-        .stock-item { background: white; padding: 12px; border-radius: var(--radius); border: 2px solid var(--gray-200); text-align: center; transition: all 0.2s; cursor: pointer; }
-        .stock-item:hover { border-color: var(--primary); }
-        .stock-item.low { border-color: var(--warning); background: #fffbeb; }
-        .stock-item.out { border-color: var(--danger); background: #fef2f2; }
-        .stock-item-name { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stock-item-qty { font-size: 1.5rem; font-weight: 800; color: var(--gray-800); }
-        .stock-item.low .stock-item-qty { color: var(--warning); }
-        .stock-item.out .stock-item-qty { color: var(--danger); }
+        /* Stock badges */
         .stock-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
         .stock-badge.ok { background: #ecfdf5; color: #059669; }
         .stock-badge.low { background: #fffbeb; color: #d97706; }
         .stock-badge.out { background: #fef2f2; color: #dc2626; }
-        .stock-alert { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 2px solid var(--danger); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-        .stock-alert-icon { font-size: 1.5rem; }
-        .stock-alert-text { flex: 1; }
-        .stock-alert-title { font-weight: 700; color: var(--danger); }
-        .stock-alert-list { font-size: 0.85rem; color: var(--gray-600); }
-        .stock-toggle { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; }
 
         /* Manager space */
         .manager-login-btn { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; }
@@ -728,23 +710,6 @@
                 <button class="btn manager-login-btn" onclick="showManagerLogin()" id="manager-login-btn">🔐 Espace Gérant</button>
             </div>
         </header>
-
-        <!-- Stock Alert -->
-        <div id="stock-alert" class="stock-alert hidden">
-            <div class="stock-alert-icon">⚠️</div>
-            <div class="stock-alert-text">
-                <div class="stock-alert-title">Stock bas !</div>
-                <div class="stock-alert-list" id="stock-alert-list"></div>
-            </div>
-        </div>
-
-        <!-- Stock Bar -->
-        <div class="card stock-bar">
-            <div class="stock-header">
-                <div class="stock-title">📦 Stock des Compléments <button class="stock-toggle" onclick="toggleStockDisplay()" id="stock-toggle-btn">▼</button></div>
-            </div>
-            <div class="stock-grid" id="stock-grid"></div>
-        </div>
 
         <!-- Vue Saisie -->
         <div id="saisie-view">
@@ -2943,43 +2908,17 @@
         }
 
         // ========== STOCK MANAGEMENT ==========
-        let stockDisplayVisible = true;
-
         function updateStockDisplay() {
+            // Initialiser les données stock si nécessaire
             if (!data.stock) {
                 data.stock = {};
                 data.produits.forEach(p => { data.stock[p.nom] = 0; });
             }
 
-            // Ensure all products have stock entry
+            // S'assurer que tous les produits ont une entrée stock
             data.produits.forEach(p => {
                 if (data.stock[p.nom] === undefined) data.stock[p.nom] = 0;
             });
-
-            const stockGrid = document.getElementById('stock-grid');
-            if (!stockGrid) return;
-
-            stockGrid.innerHTML = data.produits.map(p => {
-                const qty = data.stock[p.nom] || 0;
-                const stockClass = getStockClass(qty);
-                return `
-                    <div class="stock-item ${stockClass}" onclick="showProductStockHistory('${p.nom.replace(/'/g, "\\'")}')">
-                        <div class="stock-item-name" title="${p.nom}">${p.nom.length > 20 ? p.nom.substring(0, 18) + '...' : p.nom}</div>
-                        <div class="stock-item-qty">${qty}</div>
-                        <span class="stock-badge ${stockClass}">${stockClass === 'out' ? 'Rupture' : stockClass === 'low' ? 'Bas' : 'OK'}</span>
-                    </div>
-                `;
-            }).join('');
-
-            stockGrid.style.display = stockDisplayVisible ? 'grid' : 'none';
-            document.getElementById('stock-toggle-btn').textContent = stockDisplayVisible ? '▼' : '▶';
-
-            checkStockAlerts();
-        }
-
-        function toggleStockDisplay() {
-            stockDisplayVisible = !stockDisplayVisible;
-            updateStockDisplay();
         }
 
         function getStockClass(qty) {
@@ -2987,27 +2926,6 @@
             if (qty <= 0) return 'out';
             if (qty <= threshold) return 'low';
             return 'ok';
-        }
-
-        function checkStockAlerts() {
-            const threshold = data.stockAlertThreshold || 3;
-            const lowStock = data.produits.filter(p => (data.stock[p.nom] || 0) <= threshold);
-            const alertDiv = document.getElementById('stock-alert');
-            const alertList = document.getElementById('stock-alert-list');
-
-            if (lowStock.length > 0) {
-                const outOfStock = lowStock.filter(p => (data.stock[p.nom] || 0) === 0);
-                const lowItems = lowStock.filter(p => (data.stock[p.nom] || 0) > 0);
-
-                let text = '';
-                if (outOfStock.length > 0) text += `🔴 Rupture: ${outOfStock.map(p => p.nom).slice(0, 3).join(', ')}${outOfStock.length > 3 ? ` (+${outOfStock.length - 3})` : ''} `;
-                if (lowItems.length > 0) text += `🟠 Stock bas: ${lowItems.map(p => p.nom).slice(0, 3).join(', ')}${lowItems.length > 3 ? ` (+${lowItems.length - 3})` : ''}`;
-
-                alertList.textContent = text;
-                alertDiv.classList.remove('hidden');
-            } else {
-                alertDiv.classList.add('hidden');
-            }
         }
 
         function showReassortModal() {
