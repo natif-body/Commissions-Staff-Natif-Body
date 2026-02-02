@@ -3889,111 +3889,165 @@
             const products = [];
             let totalHT = 0;
 
-            // Essayer plusieurs méthodes de parsing
+            // Format Nutripure attendu :
+            // Référence | Produit | Taux de taxe | Prix de base (HT) | Prix unitaire (HT) | Quantité | Total (HT)
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
 
-                // Skip lignes trop courtes ou headers
-                if (line.length < 3) continue;
+                // Skip lignes trop courtes
+                if (line.length < 5) continue;
 
-                // Exclure les lignes de total, TVA, sous-total, headers, etc.
+                // Exclure les headers et lignes de total
                 const excludePatterns = [
-                    /^(Référence|Produit|Article|Désignation|Page|Date|N°|Commande|Facture|Client|Adresse|Téléphone|Email|SIRET|Code postal)/i,
-                    /^(Total|Sous-total|Sous total|Montant|Net à payer|TVA|T\.V\.A|Taxe|Remise|Réduction|Escompte|Acompte|Reste)/i,
-                    /^(HT|TTC|€|EUR|Livraison|Frais|Port|Expédition|Franco)/i,
-                    /(Total\s*(HT|TTC|général|commande|facture))/i,
+                    /^(Référence|Produit|Article|Désignation|Page|Date|N°|Commande|Facture|Client|Adresse)/i,
+                    /^(Total|Sous-total|Montant|Net à payer|Récapitulatif|Livraison|Frais|Port)/i,
+                    /(Total\s*(HT|TTC|général|commande|facture|produits))/i,
                     /(Sous[- ]?total)/i,
-                    /(Montant\s*(HT|TTC|total|TVA))/i,
-                    /(TVA\s*\d+[,.]?\d*\s*%)/i,
-                    /^(\d+[,.]?\d*\s*%\s*$)/,  // Lignes qui sont juste un pourcentage
-                    /(Base\s*HT|Taux|5[,.]5\s*%|20\s*%|10\s*%)/i,
-                    /^\s*\d+[,.]?\d*\s*€?\s*$/  // Lignes qui sont juste un prix
+                    /(Montant\s*(HT|TTC|total|TVA|de la|des))/i,
+                    /^(TVA|Taux|Base|HT|TTC|€)\s*$/i,
+                    /^\s*\d+[,.]?\d*\s*€?\s*$/,  // Lignes = juste un prix
+                    /^(Quantité|Prix|Taux de taxe)/i
                 ];
 
                 let shouldSkip = false;
                 for (const pattern of excludePatterns) {
                     if (pattern.test(line)) {
                         shouldSkip = true;
-                        console.log('Ligne exclue (pattern):', line);
                         break;
                     }
                 }
                 if (shouldSkip) continue;
 
-                // Chercher les prix (avec ou sans €)
-                const pricesWithEuro = [...line.matchAll(/(\d+)[,.](\d{2})\s*€/g)].map(m => parseFloat(m[1] + '.' + m[2]));
-                const pricesNoEuro = [...line.matchAll(/(\d+)[,.](\d{2})(?!\d)/g)].map(m => parseFloat(m[1] + '.' + m[2]));
-                const prices = pricesWithEuro.length > 0 ? pricesWithEuro : pricesNoEuro;
+                // Chercher une référence NUTRI_ ou autre format de référence
+                const refMatch = line.match(/(NUTRI_[A-Z0-9_]+|[A-Z]{2,}_[A-Z0-9_]+)/i);
 
-                // Chercher les quantités (nombre entier isolé, généralement 1-99)
-                const qtyMatches = [...line.matchAll(/(?:^|\s)(\d{1,2})(?:\s|$)/g)].map(m => parseInt(m[1]));
-                const qty = qtyMatches.find(q => q >= 1 && q <= 50) || 1;
+                // Extraire TOUS les nombres de la ligne
+                // Format: on cherche les prix (XX,XX ou XX.XX) et les quantités (entiers)
+                const allNumbers = [];
+                const numberRegex = /(\d+)[,.](\d{2})(?:\s*€)?|(?:^|\s)(\d{1,3})(?:\s|$|€)/g;
+                let match;
+                while ((match = numberRegex.exec(line)) !== null) {
+                    if (match[1] && match[2]) {
+                        // C'est un prix (XX,XX)
+                        allNumbers.push({ type: 'price', value: parseFloat(match[1] + '.' + match[2]), raw: match[0] });
+                    } else if (match[3]) {
+                        // C'est potentiellement une quantité
+                        const num = parseInt(match[3]);
+                        if (num > 0 && num < 100) {
+                            allNumbers.push({ type: 'qty', value: num, raw: match[0] });
+                        }
+                    }
+                }
 
-                // Chercher une référence NUTRI_
-                const refMatch = line.match(/(NUTRI_[A-Z0-9_]+)/i);
+                const prices = allNumbers.filter(n => n.type === 'price').map(n => n.value);
+                const quantities = allNumbers.filter(n => n.type === 'qty').map(n => n.value);
+
+                // Il faut au moins 2 prix (prix unitaire + total) pour une ligne produit valide
+                if (prices.length < 2) continue;
 
                 // Extraire le nom du produit
                 let productName = '';
 
                 // Méthode 1: Après la référence NUTRI_
                 if (refMatch) {
-                    const afterRef = line.substring(line.indexOf(refMatch[1]) + refMatch[1].length).trim();
-                    const nameMatch = afterRef.match(/^([A-Za-zÀ-ÿ\s\-\.'°%0-9]+?)(?:\s+\d|$)/);
-                    if (nameMatch) productName = nameMatch[1].trim();
+                    const refEnd = line.indexOf(refMatch[1]) + refMatch[1].length;
+                    const afterRef = line.substring(refEnd).trim();
+                    // Prendre le texte jusqu'au premier chiffre ou pourcentage
+                    const nameMatch = afterRef.match(/^([A-Za-zÀ-ÿ\s\-\.'°%0-9]+?)(?:\s+\d{1,2}[,.]|\s+5[,.]50?\s*%|$)/);
+                    if (nameMatch) {
+                        productName = nameMatch[1].replace(/\s+5[,.]50?\s*%.*$/, '').trim();
+                    }
                 }
 
-                // Méthode 2: Texte au début de la ligne (avant les chiffres)
-                if (!productName) {
-                    const nameMatch = line.match(/^([A-Za-zÀ-ÿ\s\-\.'°%]+)(?=\s+\d)/);
-                    if (nameMatch && nameMatch[1].length > 3) productName = nameMatch[1].trim();
-                }
-
-                // Méthode 3: Chercher des mots clés de produits Nutripure
-                if (!productName) {
+                // Méthode 2: Chercher des mots-clés produits Nutripure
+                if (!productName || productName.length < 3) {
                     const keywords = ['Whey', 'Isolat', 'Caséine', 'Créatine', 'BCAA', 'Omega', 'Oméga', 'Vitamine',
                                      'Magnésium', 'Zinc', 'Collagène', 'Protéine', 'Gainer', 'Pre-workout', 'Spiruline',
-                                     'Ashwagandha', 'Multivitamin', 'Detox', 'Minceur', 'Brûleur', 'Shaker'];
+                                     'Ashwagandha', 'Multivitamin', 'Detox', 'Minceur', 'Brûleur', 'Shaker', 'Barre',
+                                     'Poudre', 'Gélules', 'Caps', 'Bio', 'Vegan', 'Native', 'Clear', 'Mass', 'Lean'];
                     for (const kw of keywords) {
-                        if (line.toLowerCase().includes(kw.toLowerCase())) {
-                            // Extraire le contexte autour du mot clé
-                            const kwIndex = line.toLowerCase().indexOf(kw.toLowerCase());
-                            const start = Math.max(0, line.lastIndexOf(' ', kwIndex - 1) + 1);
-                            let end = line.indexOf('  ', kwIndex);
-                            if (end === -1) end = line.search(/\d{2}[,.]\d{2}/);
-                            if (end === -1) end = line.length;
-                            productName = line.substring(start, end).trim();
-                            break;
+                        const kwLower = kw.toLowerCase();
+                        const lineLower = line.toLowerCase();
+                        if (lineLower.includes(kwLower)) {
+                            // Trouver le contexte autour du mot-clé
+                            const idx = lineLower.indexOf(kwLower);
+                            // Chercher le début (après la référence ou début de ligne)
+                            let start = refMatch ? line.indexOf(refMatch[1]) + refMatch[1].length : 0;
+                            // Chercher la fin (avant le premier prix)
+                            let end = line.search(/\d{1,3}[,.]?\d{0,2}\s*€|\s+\d{1,2}[,.]\d{2}\s/);
+                            if (end === -1 || end <= start) end = line.length;
+
+                            productName = line.substring(start, end).replace(/^\s*5[,.]50?\s*%\s*/, '').trim();
+                            if (productName.length > 3) break;
                         }
                     }
                 }
 
-                // Si on a des prix et un nom de produit
-                if (prices.length >= 1 && productName && productName.length > 2) {
+                // Méthode 3: Texte entre référence et premiers chiffres
+                if (!productName || productName.length < 3) {
+                    const startIdx = refMatch ? line.indexOf(refMatch[1]) + refMatch[1].length : 0;
+                    const textPart = line.substring(startIdx);
+                    const nameMatch = textPart.match(/^\s*([A-Za-zÀ-ÿ\s\-\.'°]+)/);
+                    if (nameMatch && nameMatch[1].trim().length > 3) {
+                        productName = nameMatch[1].trim();
+                    }
+                }
 
-                    // Vérifier que le nom n'est pas un total/TVA/sous-total
-                    const invalidNames = ['total', 'tva', 'taxe', 'sous-total', 'sous total', 'montant',
-                                         'ht', 'ttc', 'remise', 'port', 'livraison', 'frais', 'net'];
-                    const nameLower = productName.toLowerCase().trim();
-                    if (invalidNames.some(inv => nameLower === inv || nameLower.startsWith(inv + ' '))) {
-                        console.log('Nom invalide exclu:', productName);
-                        continue;
+                // Nettoyer le nom du produit
+                productName = productName
+                    .replace(/5[,.]50?\s*%/g, '')
+                    .replace(/^\s*%\s*/, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                // Vérifier que le nom est valide
+                const invalidNames = ['total', 'tva', 'taxe', 'sous-total', 'montant', 'ht', 'ttc',
+                                     'remise', 'port', 'livraison', 'frais', 'net', 'base', 'taux'];
+                const nameLower = productName.toLowerCase();
+                if (invalidNames.some(inv => nameLower === inv || nameLower.startsWith(inv + ' '))) {
+                    continue;
+                }
+
+                // Si on a un nom de produit valide et des prix
+                if (productName && productName.length > 2 && prices.length >= 2) {
+                    // Format Nutripure: Prix base (HT) | Prix unitaire (HT) | Quantité | Total (HT)
+                    // Donc: prices[0] = base, prices[1] = unitaire, prices[2] = total (si 3 prix)
+                    // Ou: prices[0] = unitaire, prices[1] = total (si 2 prix)
+
+                    let prixBase = 0;
+                    let prixUnitaire = 0;
+                    let totalLigne = 0;
+                    let qty = quantities.length > 0 ? quantities[quantities.length - 1] : 1;
+
+                    if (prices.length >= 3) {
+                        // 3+ prix: base, unitaire, total
+                        prixBase = prices[0];
+                        prixUnitaire = prices[1];
+                        totalLigne = prices[prices.length - 1];
+                    } else {
+                        // 2 prix: unitaire, total
+                        prixUnitaire = prices[0];
+                        totalLigne = prices[1];
                     }
 
-                    // Prix unitaire = avant-dernier ou premier prix
-                    // Total = dernier prix
-                    let unitPrice = prices.length >= 2 ? prices[prices.length - 2] : prices[0];
-                    let lineTotal = prices[prices.length - 1];
-
-                    // Vérification: si total < unitPrice, inverser
-                    if (lineTotal < unitPrice && prices.length >= 2) {
-                        unitPrice = prices[0];
-                        lineTotal = prices[prices.length - 1];
+                    // Vérification cohérence: total devrait être >= unitaire
+                    if (totalLigne < prixUnitaire) {
+                        // Inverser si nécessaire
+                        [prixUnitaire, totalLigne] = [totalLigne, prixUnitaire];
                     }
 
-                    // Exclure les prix trop élevés qui sont probablement des totaux généraux
-                    if (lineTotal > 500 && prices.length <= 2) {
-                        console.log('Prix trop élevé, probablement un total:', line);
+                    // Déduire la quantité si pas trouvée
+                    if (qty === 1 && prixUnitaire > 0 && totalLigne > prixUnitaire) {
+                        const calculatedQty = Math.round(totalLigne / prixUnitaire);
+                        if (calculatedQty > 1 && calculatedQty < 50) {
+                            qty = calculatedQty;
+                        }
+                    }
+
+                    // Exclure les totaux généraux (prix très élevé sans vraie quantité)
+                    if (totalLigne > 300 && qty === 1) {
+                        console.log('Exclu (probablement total général):', line);
                         continue;
                     }
 
@@ -4003,14 +4057,15 @@
                         reference: refMatch ? refMatch[1] : '',
                         nom: matchedProduct || productName,
                         nomOriginal: productName,
-                        prixUnitaireHT: unitPrice,
+                        prixBaseHT: prixBase,
+                        prixUnitaireHT: prixUnitaire,
                         quantite: qty,
-                        totalHT: lineTotal || (unitPrice * qty),
+                        totalHT: totalLigne,
                         matched: !!matchedProduct
                     });
-                    totalHT += lineTotal || (unitPrice * qty);
+                    totalHT += totalLigne;
 
-                    console.log('Produit trouvé:', productName, '- Prix:', unitPrice, '€ - Qté:', qty);
+                    console.log('Produit trouvé:', productName, '| Base:', prixBase, '€ | Unit:', prixUnitaire, '€ | Qté:', qty, '| Total:', totalLigne, '€');
                 }
             }
 
