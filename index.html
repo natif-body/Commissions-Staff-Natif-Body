@@ -2307,6 +2307,7 @@
                         <div class="commande-header">
                             <span class="commande-date">${c.date}</span>
                             <span class="commande-coach">Coach: ${c.coach}</span>
+                            <button class="btn btn-danger btn-sm" onclick="deleteOrderFromFiche('${c.id}', '${adherentId}')" title="Supprimer cette commande" style="padding: 2px 8px; font-size: 0.75rem;">🗑️</button>
                         </div>
                         <div class="commande-produits">
                             ${c.produits.map(p => `<div class="commande-produit-row"><span>${p.quantite}x ${p.nom}</span><span>${(p.quantite * p.prixUnitaire).toFixed(2)}€</span></div>`).join('')}
@@ -2382,6 +2383,42 @@
             closeModal('fiche-adherent-modal');
             updateAdherentsView();
             populateSelects();
+        }
+
+        function deleteOrderFromFiche(orderId, adherentId) {
+            if (!confirm('Supprimer cette commande ? Les points de fidélité associés seront aussi retirés.')) return;
+
+            const order = data.commandes.find(c => c.id === orderId);
+            if (order) {
+                // Retirer les points de fidélité gagnés
+                const adherent = data.adherents.find(a => a.id === adherentId);
+                if (adherent && order.pointsGagnes) {
+                    adherent.pointsFidelite = Math.max(0, (adherent.pointsFidelite || 0) - order.pointsGagnes);
+                }
+
+                // Remettre le stock (annuler la vente)
+                if (order.produits) {
+                    order.produits.forEach(p => {
+                        if (data.stock[p.nom] !== undefined) {
+                            data.stock[p.nom] += p.quantite;
+                        }
+                    });
+                }
+
+                // Supprimer la commande
+                data.commandes = data.commandes.filter(c => c.id !== orderId);
+
+                // Log activité si fonction existe
+                if (typeof logActivity === 'function') {
+                    logActivity(`Commande supprimée (${order.total.toFixed(2)}€) - Client: ${adherent ? adherent.prenom : 'Inconnu'}`);
+                }
+
+                saveData();
+
+                // Rafraîchir la fiche adhérent
+                showFicheAdherent(adherentId);
+                updateView();
+            }
         }
 
         // ========== COMMANDES ==========
