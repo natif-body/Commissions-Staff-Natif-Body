@@ -151,6 +151,10 @@
             background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
         }
 
+        .summary-item.top-commission {
+            background: linear-gradient(135deg, #E3F2FD 0%, #90CAF9 100%);
+        }
+
         .summary-item label {
             display: block;
             font-size: 0.9em;
@@ -646,7 +650,11 @@
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);"></div>
-                    <span>300€ et plus = <strong>15% commission</strong></span>
+                    <span>300€ – 499€ = <strong>15% commission</strong></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: linear-gradient(135deg, #E3F2FD 0%, #90CAF9 100%);"></div>
+                    <span>500€ et plus = <strong>20% commission</strong></span>
                 </div>
             </div>
         </div>
@@ -813,7 +821,9 @@
         }
 
         function calculerCommission(montant) {
-            return montant < 300 ? montant * 0.10 : montant * 0.15;
+            if (montant >= 500) return montant * 0.20;
+            if (montant >= 300) return montant * 0.15;
+            return montant * 0.10;
         }
 
         function populateSelects() {
@@ -858,10 +868,24 @@
 
             const ventesMois = calculerVentesCoach(moisActuel, coachActuel);
             const commission = calculerCommission(ventesMois);
-            const taux = ventesMois < 300 ? 10 : 15;
-            const reste = ventesMois < 300 ? 300 - ventesMois : 0;
-
-            const summaryClass = ventesMois < 300 && ventesMois > 0 ? 'low-commission' : ventesMois >= 300 ? 'high-commission' : '';
+            let taux, summaryClass, subMsg;
+            if (ventesMois >= 500) {
+                taux = 20;
+                summaryClass = 'top-commission';
+                subMsg = '🏆 Niveau 20% atteint !';
+            } else if (ventesMois >= 300) {
+                taux = 15;
+                summaryClass = 'high-commission';
+                subMsg = `Encore ${(500 - ventesMois).toFixed(2)} € pour 20%`;
+            } else if (ventesMois > 0) {
+                taux = 10;
+                summaryClass = 'low-commission';
+                subMsg = `Encore ${(300 - ventesMois).toFixed(2)} € pour 15%`;
+            } else {
+                taux = 10;
+                summaryClass = '';
+                subMsg = `Encore 300 € pour 15%`;
+            }
 
             document.getElementById('summary').innerHTML = `
                 <div class="summary-item ${summaryClass}">
@@ -871,7 +895,7 @@
                 <div class="summary-item ${summaryClass}">
                     <label>Taux de commission</label>
                     <div class="value">${taux}%</div>
-                    <div class="sub-value">${reste > 0 ? `Encore ${reste.toFixed(2)}€ pour 15%` : '🎉 Niveau 15% atteint!'}</div>
+                    <div class="sub-value">${subMsg}</div>
                 </div>
                 <div class="summary-item ${summaryClass}">
                     <label>Commission</label>
@@ -1001,7 +1025,7 @@
                 data.coachs.forEach(coach => {
                     const vente = calculerVentesCoach(m, coach);
                     const commission = calculerCommission(vente);
-                    const bgColor = vente < 300 && vente > 0 ? 'background: #FFF7E6;' : vente >= 300 ? 'background: #E8F5E9;' : '';
+                    const bgColor = vente >= 500 ? 'background: #E3F2FD;' : vente >= 300 ? 'background: #E8F5E9;' : vente > 0 ? 'background: #FFF7E6;' : '';
 
                     tableHtml += `
                         <td style="${bgColor} text-align: right;">${vente > 0 ? vente.toFixed(2) + ' €' : '-'}</td>
