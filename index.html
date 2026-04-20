@@ -155,6 +155,72 @@
             background: linear-gradient(135deg, #E3F2FD 0%, #90CAF9 100%);
         }
 
+        .client-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .client-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .client-card:hover {
+            border-color: #E31E24;
+            box-shadow: 0 4px 15px rgba(227,30,36,0.15);
+            transform: translateY(-2px);
+        }
+
+        .points-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #E31E24, #8B1319);
+            color: white;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.82em;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .loyalty-bar {
+            background: #e8e8e8;
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+            margin: 8px 0 4px;
+        }
+
+        .loyalty-bar-fill {
+            height: 10px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #E31E24, #8B1319);
+            transition: width 0.4s;
+        }
+
+        .commande-row {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-left: 4px solid #E31E24;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #FFF3E0;
+            color: #E65100;
+            border-radius: 20px;
+            padding: 3px 10px;
+            font-size: 0.8em;
+            margin: 2px;
+        }
+
         .summary-item label {
             display: block;
             font-size: 0.9em;
@@ -596,6 +662,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('saisie')">📝 Saisie</button>
                 <button class="tab-btn" onclick="switchTab('dashboard')">📊 Dashboard</button>
+                <button class="tab-btn" onclick="switchTab('clients')">👥 Clients</button>
                 <button class="tab-btn" onclick="switchTab('settings')">⚙️ Paramètres</button>
             </div>
         </div>
@@ -659,6 +726,33 @@
             </div>
         </div>
 
+        <!-- Vue Clients -->
+        <div id="clients-view" class="hidden">
+            <div class="card">
+                <div class="summary" id="clients-stats"></div>
+            </div>
+
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+                    <h2>👥 Adhérents</h2>
+                    <button class="btn btn-primary" onclick="showAddClientModal()">➕ Ajouter un adhérent</button>
+                </div>
+                <div class="selector-group" style="margin-bottom:5px;">
+                    <input type="text" id="client-search" placeholder="Rechercher un adhérent..." oninput="updateClientsView()">
+                </div>
+                <div class="client-grid" id="clients-grid"></div>
+            </div>
+
+            <div class="card">
+                <h2 style="margin-bottom:15px;">📋 Rapport mensuel — Qui a vendu à qui</h2>
+                <div class="selector-group" style="max-width:250px;margin-bottom:15px;">
+                    <label>📅 Mois</label>
+                    <select id="rapport-mois-select" onchange="updateRapport()"></select>
+                </div>
+                <div id="rapport-content"></div>
+            </div>
+        </div>
+
         <!-- Vue Paramètres -->
         <div id="settings-view" class="hidden">
             <!-- Gestion des Coachs -->
@@ -697,6 +791,47 @@
                     <div class="item-list" id="price-list"></div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Ajouter Client -->
+    <div id="add-client-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ajouter un adhérent</h2>
+                <span class="close" onclick="closeModal('add-client-modal')">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>Prénom</label>
+                <input type="text" id="new-client-prenom" placeholder="Ex: Jean">
+            </div>
+            <div class="form-group">
+                <label>Nom</label>
+                <input type="text" id="new-client-nom" placeholder="Ex: Dupont">
+            </div>
+            <button class="btn btn-primary" onclick="addClient()">Ajouter</button>
+        </div>
+    </div>
+
+    <!-- Modal Profil Client -->
+    <div id="client-profile-modal" class="modal">
+        <div class="modal-content" style="max-width:700px;width:95%;">
+            <div class="modal-header">
+                <h2 id="profile-title">Compte client</h2>
+                <span class="close" onclick="closeModal('client-profile-modal')">&times;</span>
+            </div>
+            <div id="profile-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal Enregistrer une vente -->
+    <div id="add-commande-modal" class="modal">
+        <div class="modal-content" style="max-width:600px;width:95%;">
+            <div class="modal-header">
+                <h2>Enregistrer une vente</h2>
+                <span class="close" onclick="closeModal('add-commande-modal')">&times;</span>
+            </div>
+            <div id="commande-form-content"></div>
         </div>
     </div>
 
@@ -771,8 +906,10 @@
                 { nom: "Polo Unisexe", prixBase: 34.9 },
                 { nom: "Sweat Unisexe", prixBase: 49.9 }
             ],
-            prixHistorique: {}, // { "produit": { "Septembre": 3.5, "Octobre": 4.0 } }
-            ventes: {}
+            prixHistorique: {},
+            ventes: {},
+            clients: [],
+            commandes: []
         };
 
         // Initialiser les données si vide
@@ -799,6 +936,9 @@
                     });
                 });
             }
+
+            if (!data.clients) data.clients = [];
+            if (!data.commandes) data.commandes = [];
 
             saveData();
         }
@@ -841,6 +981,12 @@
             if (priceMonthSelect) {
                 priceMonthSelect.innerHTML = mois.map(m => `<option value="${m}">${m}</option>`).join('');
             }
+
+            // Rapport mois select
+            const rapportMoisSelect = document.getElementById('rapport-mois-select');
+            if (rapportMoisSelect) {
+                rapportMoisSelect.innerHTML = mois.map(m => `<option value="${m}">${m}</option>`).join('');
+            }
         }
 
         function switchTab(tab) {
@@ -849,6 +995,7 @@
 
             document.getElementById('saisie-view').classList.add('hidden');
             document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('clients-view').classList.add('hidden');
             document.getElementById('settings-view').classList.add('hidden');
 
             if (tab === 'saisie') {
@@ -857,6 +1004,10 @@
             } else if (tab === 'dashboard') {
                 document.getElementById('dashboard-view').classList.remove('hidden');
                 updateDashboard();
+            } else if (tab === 'clients') {
+                document.getElementById('clients-view').classList.remove('hidden');
+                populateSelects();
+                updateClientsView();
             } else if (tab === 'settings') {
                 document.getElementById('settings-view').classList.remove('hidden');
                 updateSettings();
@@ -1275,6 +1426,377 @@
             saveData();
             updateSettings();
             alert('Produit supprimé avec succès !');
+        }
+
+        // ============================================================
+        // GESTION DES CLIENTS / ADHÉRENTS
+        // ============================================================
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function showAddClientModal() {
+            document.getElementById('new-client-prenom').value = '';
+            document.getElementById('new-client-nom').value = '';
+            document.getElementById('add-client-modal').classList.add('show');
+        }
+
+        function addClient() {
+            const prenom = document.getElementById('new-client-prenom').value.trim();
+            const nom = document.getElementById('new-client-nom').value.trim();
+            if (!prenom || !nom) { alert('Veuillez renseigner le prénom et le nom'); return; }
+
+            data.clients.push({
+                id: generateId(),
+                prenom,
+                nom,
+                produitsFavoris: [],
+                points: 0,
+                dateCreation: new Date().toLocaleDateString('fr-FR')
+            });
+
+            saveData();
+            closeModal('add-client-modal');
+            updateClientsView();
+        }
+
+        function deleteClient(id) {
+            const client = data.clients.find(c => c.id === id);
+            if (!confirm(`Supprimer ${client.prenom} ${client.nom} ?`)) return;
+            data.clients = data.clients.filter(c => c.id !== id);
+            data.commandes = data.commandes.filter(c => c.clientId !== id);
+            saveData();
+            closeModal('client-profile-modal');
+            updateClientsView();
+        }
+
+        function updateClientsView() {
+            const totalPoints = data.clients.reduce((s, c) => s + c.points, 0);
+            const totalCA = data.commandes.reduce((s, c) => s + c.total, 0);
+
+            document.getElementById('clients-stats').innerHTML = `
+                <div class="summary-item">
+                    <label>Adhérents</label>
+                    <div class="value">${data.clients.length}</div>
+                </div>
+                <div class="summary-item">
+                    <label>Commandes tracées</label>
+                    <div class="value">${data.commandes.length}</div>
+                </div>
+                <div class="summary-item">
+                    <label>CA clients tracé</label>
+                    <div class="value">${totalCA.toFixed(2)} €</div>
+                </div>
+                <div class="summary-item">
+                    <label>Points distribués</label>
+                    <div class="value">${totalPoints}</div>
+                </div>
+            `;
+
+            const search = (document.getElementById('client-search')?.value || '').toLowerCase();
+            const filtered = data.clients.filter(c =>
+                `${c.prenom} ${c.nom}`.toLowerCase().includes(search)
+            );
+
+            if (filtered.length === 0) {
+                document.getElementById('clients-grid').innerHTML =
+                    '<p style="color:#888;text-align:center;padding:30px;grid-column:1/-1;">Aucun adhérent trouvé</p>';
+            } else {
+                document.getElementById('clients-grid').innerHTML = filtered.map(client => {
+                    const cmds = data.commandes.filter(c => c.clientId === client.id);
+                    const totalAchats = cmds.reduce((s, c) => s + c.total, 0);
+                    const dernierAchat = cmds.length > 0 ? cmds[cmds.length - 1].mois : '—';
+                    const pct = client.points % 100;
+                    const manque = 100 - pct;
+
+                    return `
+                        <div class="client-card" onclick="showClientProfile('${client.id}')">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
+                                <div>
+                                    <div style="font-size:1.15em;font-weight:bold;">${client.prenom} ${client.nom}</div>
+                                    <div style="color:#888;font-size:0.8em;">Depuis le ${client.dateCreation}</div>
+                                </div>
+                                <span class="points-badge">⭐ ${client.points} pts</span>
+                            </div>
+                            <div style="font-size:0.85em;color:#555;margin-bottom:6px;">
+                                ${cmds.length} commande${cmds.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${totalAchats.toFixed(2)} € &nbsp;·&nbsp; Dernier: ${dernierAchat}
+                            </div>
+                            <div class="loyalty-bar"><div class="loyalty-bar-fill" style="width:${pct}%;"></div></div>
+                            <div style="font-size:0.75em;color:#999;">${pct}/100 pts — encore ${manque} pts pour un bon de -5€</div>
+                            ${client.produitsFavoris.length > 0
+                                ? `<div style="margin-top:8px;">${client.produitsFavoris.slice(0, 3).map(p => `<span class="tag">⭐ ${p}</span>`).join('')}</div>`
+                                : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            updateRapport();
+        }
+
+        function showClientProfile(id) {
+            const client = data.clients.find(c => c.id === id);
+            if (!client) return;
+
+            const cmds = data.commandes.filter(c => c.clientId === id).slice().reverse();
+            const totalAchats = cmds.reduce((s, c) => s + c.total, 0);
+            const bons = Math.floor(client.points / 100);
+            const pct = client.points % 100;
+
+            const cmdHtml = cmds.length === 0
+                ? '<p style="color:#888;text-align:center;padding:15px;">Aucune commande enregistrée</p>'
+                : cmds.map(cmd => `
+                    <div class="commande-row">
+                        <div style="display:flex;justify-content:space-between;font-weight:bold;">
+                            <span>${cmd.mois} — Coach : ${cmd.coach}</span>
+                            <span style="color:#E31E24;">${cmd.total.toFixed(2)} €</span>
+                        </div>
+                        <div style="font-size:0.85em;color:#666;margin-top:4px;">
+                            ${cmd.produits.map(p => `${p.nom} ×${p.qty}`).join(' · ')}
+                        </div>
+                        ${cmd.remiseAppliquee > 0
+                            ? `<div style="font-size:0.82em;color:#2e7d32;">Bon fidélité appliqué : -${cmd.remiseAppliquee.toFixed(2)} €</div>`
+                            : ''}
+                        <div style="font-size:0.8em;color:#888;margin-top:2px;">+${cmd.pointsGagnes} pts gagnés</div>
+                    </div>
+                `).join('');
+
+            const autresFavoris = data.produits.filter(p => !client.produitsFavoris.includes(p.nom));
+            const favHtml = client.produitsFavoris.map(p =>
+                `<span class="tag">⭐ ${p} <span onclick="removeFavori('${id}','${p.replace(/'/g, "\\'")}');event.stopPropagation();" style="cursor:pointer;margin-left:3px;opacity:0.6;">×</span></span>`
+            ).join('');
+
+            document.getElementById('profile-title').textContent = `${client.prenom} ${client.nom}`;
+            document.getElementById('profile-content').innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+                    <div class="summary-item">
+                        <label>Points fidélité</label>
+                        <div class="value">${client.points}</div>
+                        <div class="sub-value">${bons > 0 ? `${bons} bon(s) de -5€ disponible(s)` : `Encore ${100 - pct} pts pour -5€`}</div>
+                    </div>
+                    <div class="summary-item">
+                        <label>Total achats</label>
+                        <div class="value">${totalAchats.toFixed(2)} €</div>
+                        <div class="sub-value">${cmds.length} commande(s)</div>
+                    </div>
+                </div>
+                <div class="loyalty-bar" style="height:13px;margin-bottom:4px;">
+                    <div class="loyalty-bar-fill" style="width:${pct}%;"></div>
+                </div>
+                <p style="font-size:0.82em;color:#888;margin-bottom:18px;">${pct}/100 pts vers le prochain bon de -5€</p>
+
+                <div style="margin-bottom:18px;">
+                    <strong>Produits favoris</strong>
+                    <div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                        ${favHtml || '<span style="color:#888;font-size:0.9em;">Aucun favori</span>'}
+                        <select id="new-favori-select" style="padding:4px 8px;border:1px solid #ccc;border-radius:6px;font-size:0.85em;">
+                            <option value="">Ajouter...</option>
+                            ${autresFavoris.map(p => `<option value="${p.nom}">${p.nom}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-primary" style="padding:5px 10px;font-size:0.82em;" onclick="addFavori('${id}')">+</button>
+                    </div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                    <strong>Historique des commandes</strong>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-primary" onclick="showAddCommandeModal('${id}')">➕ Enregistrer une vente</button>
+                        <button class="btn btn-danger" style="padding:8px 14px;font-size:0.88em;" onclick="deleteClient('${id}')">🗑️ Supprimer</button>
+                    </div>
+                </div>
+                ${cmdHtml}
+            `;
+
+            document.getElementById('client-profile-modal').classList.add('show');
+        }
+
+        function addFavori(clientId) {
+            const val = document.getElementById('new-favori-select').value;
+            if (!val) return;
+            const client = data.clients.find(c => c.id === clientId);
+            if (!client.produitsFavoris.includes(val)) {
+                client.produitsFavoris.push(val);
+                saveData();
+                showClientProfile(clientId);
+            }
+        }
+
+        function removeFavori(clientId, produit) {
+            const client = data.clients.find(c => c.id === clientId);
+            client.produitsFavoris = client.produitsFavoris.filter(p => p !== produit);
+            saveData();
+            showClientProfile(clientId);
+        }
+
+        function showAddCommandeModal(clientId) {
+            const client = data.clients.find(c => c.id === clientId);
+            const bons = Math.floor(client.points / 100);
+
+            const coachOptions = data.coachs.map(c => `<option value="${c}">${c}</option>`).join('');
+            const moisOptions = mois.map(m => `<option value="${m}">${m}</option>`).join('');
+
+            const produitsHtml = data.produits.map(p => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0f0f0;">
+                    <span style="font-size:0.88em;flex:1;">${p.nom} <span style="color:#999;">${p.prixBase.toFixed(2)} €</span></span>
+                    <div style="display:flex;align-items:center;gap:5px;">
+                        <button type="button" class="btn btn-minus" style="width:26px;height:26px;font-size:0.9em;padding:0;" onclick="cmdQtyChange('${p.nom.replace(/'/g, "\\'")}', -1)">−</button>
+                        <input type="number" id="cmd-qty-${p.nom}" value="0" min="0" style="width:46px;text-align:center;border:1px solid #ccc;border-radius:6px;padding:3px;" oninput="cmdUpdateTotal()">
+                        <button type="button" class="btn btn-plus" style="width:26px;height:26px;font-size:0.9em;padding:0;" onclick="cmdQtyChange('${p.nom.replace(/'/g, "\\'")}', 1)">+</button>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('commande-form-content').innerHTML = `
+                <input type="hidden" id="cmd-client-id" value="${clientId}">
+                <div class="form-group">
+                    <label>Coach vendeur</label>
+                    <select id="cmd-coach" style="width:100%;padding:10px;border:2px solid #E31E24;border-radius:8px;">${coachOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label>Mois</label>
+                    <select id="cmd-mois" style="width:100%;padding:10px;border:2px solid #E31E24;border-radius:8px;" onchange="cmdUpdateTotal()">${moisOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label>Produits</label>
+                    <div style="max-height:260px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;">
+                        ${produitsHtml}
+                    </div>
+                </div>
+                ${bons > 0 ? `
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="cmd-use-points" onchange="cmdUpdateTotal()">
+                        Utiliser un bon de fidélité (−5 €) — ${bons} bon(s) disponible(s)
+                    </label>
+                </div>` : ''}
+                <div style="background:#f5f5f5;border-radius:8px;padding:14px;margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:1.1em;">
+                        <span>Total</span>
+                        <span id="cmd-total" style="color:#E31E24;">0.00 €</span>
+                    </div>
+                    <div style="color:#888;font-size:0.85em;margin-top:4px;">Points gagnés : <strong id="cmd-points-gagnes">0</strong></div>
+                </div>
+                <button class="btn btn-primary" style="width:100%;" onclick="saveCommande()">💾 Enregistrer la vente</button>
+            `;
+
+            closeModal('client-profile-modal');
+            document.getElementById('add-commande-modal').classList.add('show');
+        }
+
+        function cmdQtyChange(produit, delta) {
+            const input = document.getElementById(`cmd-qty-${produit}`);
+            input.value = Math.max(0, (parseInt(input.value) || 0) + delta);
+            cmdUpdateTotal();
+        }
+
+        function cmdUpdateTotal() {
+            const moisChoisi = document.getElementById('cmd-mois')?.value || mois[0];
+            let totalBrut = 0;
+            data.produits.forEach(p => {
+                const qty = parseInt(document.getElementById(`cmd-qty-${p.nom}`)?.value) || 0;
+                totalBrut += qty * getPrixProduit(p.nom, moisChoisi);
+            });
+
+            const remise = document.getElementById('cmd-use-points')?.checked ? 5 : 0;
+            const total = Math.max(0, totalBrut - remise);
+            const pts = Math.floor(total);
+
+            const el = document.getElementById('cmd-total');
+            if (el) el.innerHTML = remise > 0
+                ? `<span style="color:#999;text-decoration:line-through;font-size:0.85em;">${totalBrut.toFixed(2)} €</span> ${total.toFixed(2)} €`
+                : `${total.toFixed(2)} €`;
+
+            const elPts = document.getElementById('cmd-points-gagnes');
+            if (elPts) elPts.textContent = pts;
+        }
+
+        function saveCommande() {
+            const clientId = document.getElementById('cmd-client-id').value;
+            const coach = document.getElementById('cmd-coach').value;
+            const moisChoisi = document.getElementById('cmd-mois').value;
+            const usePoints = document.getElementById('cmd-use-points')?.checked;
+
+            const produits = [];
+            let totalBrut = 0;
+            data.produits.forEach(p => {
+                const qty = parseInt(document.getElementById(`cmd-qty-${p.nom}`)?.value) || 0;
+                if (qty > 0) {
+                    const prix = getPrixProduit(p.nom, moisChoisi);
+                    produits.push({ nom: p.nom, qty, prix });
+                    totalBrut += qty * prix;
+                    if (!data.ventes[moisChoisi]) data.ventes[moisChoisi] = {};
+                    if (!data.ventes[moisChoisi][coach]) data.ventes[moisChoisi][coach] = {};
+                    data.ventes[moisChoisi][coach][p.nom] = (data.ventes[moisChoisi][coach][p.nom] || 0) + qty;
+                }
+            });
+
+            if (produits.length === 0) { alert('Sélectionnez au moins un produit'); return; }
+
+            const remise = usePoints ? 5 : 0;
+            const total = Math.max(0, totalBrut - remise);
+            const pointsGagnes = Math.floor(total);
+
+            const client = data.clients.find(c => c.id === clientId);
+            if (usePoints) client.points = Math.max(0, client.points - 100);
+            client.points += pointsGagnes;
+
+            data.commandes.push({
+                id: generateId(),
+                clientId,
+                coach,
+                mois: moisChoisi,
+                produits,
+                total,
+                remiseAppliquee: remise,
+                pointsGagnes,
+                dateCreation: new Date().toLocaleDateString('fr-FR')
+            });
+
+            saveData();
+            closeModal('add-commande-modal');
+            showClientProfile(clientId);
+            updateClientsView();
+        }
+
+        function updateRapport() {
+            const select = document.getElementById('rapport-mois-select');
+            if (!select) return;
+            const moisChoisi = select.value;
+            const cmds = data.commandes.filter(c => c.mois === moisChoisi);
+
+            if (cmds.length === 0) {
+                document.getElementById('rapport-content').innerHTML =
+                    '<p style="color:#888;text-align:center;padding:20px;">Aucune vente enregistrée pour ce mois</p>';
+                return;
+            }
+
+            const byCoach = {};
+            cmds.forEach(cmd => {
+                if (!byCoach[cmd.coach]) byCoach[cmd.coach] = [];
+                byCoach[cmd.coach].push(cmd);
+            });
+
+            let html = '';
+            Object.entries(byCoach).forEach(([coach, coachCmds]) => {
+                const totalCoach = coachCmds.reduce((s, c) => s + c.total, 0);
+                html += `
+                    <div style="margin-bottom:18px;">
+                        <div style="font-weight:bold;font-size:1.05em;color:#E31E24;margin-bottom:8px;">
+                            👤 ${coach} — ${totalCoach.toFixed(2)} € · ${coachCmds.length} vente(s)
+                        </div>
+                        ${coachCmds.map(cmd => {
+                            const cl = data.clients.find(c => c.id === cmd.clientId);
+                            return `<div style="padding:8px 12px;background:#f9f9f9;border-radius:6px;margin-bottom:5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
+                                <span style="font-size:0.9em;">${cl ? cl.prenom + ' ' + cl.nom : '—'} &nbsp;·&nbsp; ${cmd.produits.map(p => p.nom + ' ×' + p.qty).join(', ')}</span>
+                                <strong>${cmd.total.toFixed(2)} €</strong>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                `;
+            });
+
+            document.getElementById('rapport-content').innerHTML = html;
         }
 
         // Écouter les changements du mois pour les prix
