@@ -777,6 +777,23 @@
                 </div>
             </div>
 
+            <!-- Import / Export -->
+            <div class="card">
+                <div class="settings-section">
+                    <h3>💾 Sauvegarde des données</h3>
+                    <div class="alert alert-info" style="margin-bottom:18px;">
+                        ℹ️ Toutes les données (ventes, adhérents, commandes, points) sont stockées localement dans votre navigateur. Exportez régulièrement pour éviter toute perte.
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <button class="btn btn-success" onclick="exportData()">⬇️ Exporter la base (JSON)</button>
+                        <label class="btn btn-secondary" style="cursor:pointer;display:inline-flex;align-items:center;">
+                            ⬆️ Importer une sauvegarde
+                            <input type="file" accept=".json" id="import-file-input" style="display:none;" onchange="importData(event)">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
             <!-- Gestion des Prix -->
             <div class="card">
                 <div class="settings-section">
@@ -1426,6 +1443,49 @@
             saveData();
             updateSettings();
             alert('Produit supprimé avec succès !');
+        }
+
+        // ============================================================
+        // IMPORT / EXPORT
+        // ============================================================
+
+        function exportData() {
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `natifbody-backup-${date}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!imported.coachs || !imported.produits || !imported.ventes) {
+                        alert('Fichier invalide : ce n\'est pas une sauvegarde NatifBody.');
+                        return;
+                    }
+                    if (!confirm('Cette action remplacera toutes les données actuelles. Continuer ?')) return;
+                    data = imported;
+                    if (!data.clients) data.clients = [];
+                    if (!data.commandes) data.commandes = [];
+                    saveData();
+                    populateSelects();
+                    updateSettings();
+                    alert('Import réussi !');
+                } catch {
+                    alert('Fichier JSON invalide.');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
         }
 
         // ============================================================
