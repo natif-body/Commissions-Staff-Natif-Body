@@ -654,7 +654,7 @@
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: linear-gradient(135deg, #E3F2FD 0%, #90CAF9 100%);"></div>
-                    <span>500€ et plus = <strong>20% commission</strong></span>
+                    <span>500€ et plus = <strong>20% commission</strong> <em style="font-size:0.85em;color:#888;">(à partir de Mai)</em></span>
                 </div>
             </div>
         </div>
@@ -737,6 +737,7 @@
     <script>
         // Données initiales
         const mois = ["Septembre", "Octobre", "Novembre", "Décembre", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août"];
+        const MOIS_PALIER_20 = ["Mai", "Juin", "Juillet", "Août"];
 
         // Chargement des données
         let data = JSON.parse(localStorage.getItem('appData')) || {
@@ -820,8 +821,8 @@
             return total;
         }
 
-        function calculerCommission(montant) {
-            if (montant >= 500) return montant * 0.20;
+        function calculerCommission(montant, moisNom) {
+            if (MOIS_PALIER_20.includes(moisNom) && montant >= 500) return montant * 0.20;
             if (montant >= 300) return montant * 0.15;
             return montant * 0.10;
         }
@@ -867,25 +868,38 @@
             const coachActuel = document.getElementById('coach-select').value;
 
             const ventesMois = calculerVentesCoach(moisActuel, coachActuel);
-            const commission = calculerCommission(ventesMois);
-            let taux, summaryClass, subMsg;
-            if (ventesMois >= 500) {
-                taux = 20;
-                summaryClass = 'top-commission';
-                subMsg = '🏆 Niveau 20% atteint !';
-            } else if (ventesMois >= 300) {
-                taux = 15;
-                summaryClass = 'high-commission';
-                subMsg = `Encore ${(500 - ventesMois).toFixed(2)} € pour 20%`;
+            const commission = calculerCommission(ventesMois, moisActuel);
+            const palier20 = MOIS_PALIER_20.includes(moisActuel);
+            let taux, summaryClass, ecart, progressPct, labelEcart;
+
+            if (palier20 && ventesMois >= 500) {
+                taux = 20; summaryClass = 'top-commission';
+                ecart = 0; progressPct = 100; labelEcart = '🏆 Palier maximum atteint !';
+            } else if (palier20 && ventesMois >= 300) {
+                taux = 15; summaryClass = 'high-commission';
+                ecart = 500 - ventesMois; progressPct = Math.round((ventesMois - 300) / 200 * 100);
+                labelEcart = `⚡ Encore <strong>${ecart.toFixed(2)} €</strong> pour 20%`;
+            } else if (!palier20 && ventesMois >= 300) {
+                taux = 15; summaryClass = 'high-commission';
+                ecart = 0; progressPct = 100; labelEcart = '🎉 Palier 15% atteint !';
             } else if (ventesMois > 0) {
-                taux = 10;
-                summaryClass = 'low-commission';
-                subMsg = `Encore ${(300 - ventesMois).toFixed(2)} € pour 15%`;
+                taux = 10; summaryClass = 'low-commission';
+                ecart = 300 - ventesMois; progressPct = Math.round(ventesMois / 300 * 100);
+                labelEcart = `⚡ Encore <strong>${ecart.toFixed(2)} €</strong> pour 15%`;
             } else {
-                taux = 10;
-                summaryClass = '';
-                subMsg = `Encore 300 € pour 15%`;
+                taux = 10; summaryClass = '';
+                ecart = 300; progressPct = 0; labelEcart = `Encore 300 € pour 15%`;
             }
+
+            const barColor = taux === 20 ? '#1565C0' : taux === 15 ? '#2e7d32' : '#E31E24';
+            const ecartHtml = ecart > 0
+                ? `<div style="margin-top:10px;">
+                    <div style="background:rgba(0,0,0,0.12);border-radius:10px;height:9px;overflow:hidden;">
+                      <div style="background:${barColor};height:9px;border-radius:10px;width:${progressPct}%;transition:width 0.4s;"></div>
+                    </div>
+                    <div style="font-size:0.8em;color:#555;margin-top:4px;">${progressPct}% vers le prochain palier</div>
+                  </div>`
+                : '';
 
             document.getElementById('summary').innerHTML = `
                 <div class="summary-item ${summaryClass}">
@@ -895,11 +909,16 @@
                 <div class="summary-item ${summaryClass}">
                     <label>Taux de commission</label>
                     <div class="value">${taux}%</div>
-                    <div class="sub-value">${subMsg}</div>
                 </div>
                 <div class="summary-item ${summaryClass}">
                     <label>Commission</label>
                     <div class="value">${commission.toFixed(2)} €</div>
+                </div>
+                <div class="summary-item ${summaryClass}">
+                    <label>Écart palier suivant</label>
+                    <div class="value" style="font-size:1.3em;">${ecart > 0 ? ecart.toFixed(2) + ' €' : '—'}</div>
+                    <div class="sub-value" style="margin-top:4px;">${labelEcart}</div>
+                    ${ecartHtml}
                 </div>
             `;
 
@@ -975,7 +994,7 @@
                 mois.forEach(m => {
                     const vente = calculerVentesCoach(m, coach);
                     totalVentes += vente;
-                    totalCommissions += calculerCommission(vente);
+                    totalCommissions += calculerCommission(vente, m);
                 });
 
                 const tauxMoyen = totalVentes > 0 ? (totalCommissions / totalVentes) * 100 : 0;
@@ -1024,8 +1043,8 @@
 
                 data.coachs.forEach(coach => {
                     const vente = calculerVentesCoach(m, coach);
-                    const commission = calculerCommission(vente);
-                    const bgColor = vente >= 500 ? 'background: #E3F2FD;' : vente >= 300 ? 'background: #E8F5E9;' : vente > 0 ? 'background: #FFF7E6;' : '';
+                    const commission = calculerCommission(vente, m);
+                    const bgColor = (MOIS_PALIER_20.includes(m) && vente >= 500) ? 'background: #E3F2FD;' : vente >= 300 ? 'background: #E8F5E9;' : vente > 0 ? 'background: #FFF7E6;' : '';
 
                     tableHtml += `
                         <td style="${bgColor} text-align: right;">${vente > 0 ? vente.toFixed(2) + ' €' : '-'}</td>
@@ -1045,7 +1064,7 @@
                 mois.forEach(m => {
                     const vente = calculerVentesCoach(m, coach);
                     totalVentes += vente;
-                    totalCommissions += calculerCommission(vente);
+                    totalCommissions += calculerCommission(vente, m);
                 });
 
                 tableHtml += `
