@@ -605,6 +605,10 @@
             <div class="card">
                 <div class="selectors">
                     <div class="selector-group">
+                        <label>📆 Année</label>
+                        <select id="annee-select" onchange="changerAnnee()"></select>
+                    </div>
+                    <div class="selector-group">
                         <label>📅 Mois</label>
                         <select id="mois-select" onchange="updateView()"></select>
                     </div>
@@ -772,51 +776,99 @@
                 { nom: "Sweat Unisexe", prixBase: 49.9 }
             ],
             prixHistorique: {}, // { "produit": { "Septembre": 3.5, "Octobre": 4.0 } }
-            ventes: {}
+            ventes: {},
+            annees: []
         };
 
-        // Initialiser les données si vide
-        function initData() {
-            if (!data.prixHistorique || Object.keys(data.prixHistorique).length === 0) {
-                data.prixHistorique = {};
-                data.produits.forEach(p => {
-                    data.prixHistorique[p.nom] = {};
-                    mois.forEach(m => {
-                        data.prixHistorique[p.nom][m] = p.prixBase;
+        // Gestion des périodes annuelles : septembre -> août
+        function getPeriodeAnnuelle(date = new Date()) {
+            const y = date.getFullYear(), m = date.getMonth() + 1;
+            return m >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+        }
+        const PERIODE_ACTUELLE = getPeriodeAnnuelle();
+        const DEBUT_ACTUELLE = parseInt(PERIODE_ACTUELLE.split('-')[0], 10);
+        const PERIODE_LEGACY = `${DEBUT_ACTUELLE - 1}-${DEBUT_ACTUELLE}`;
+
+        function creerPeriodeVentes(periode) {
+            if (!data.ventes[periode]) data.ventes[periode] = {};
+            mois.forEach(m => {
+                if (!data.ventes[periode][m]) data.ventes[periode][m] = {};
+                data.coachs.forEach(coach => {
+                    if (!data.ventes[periode][m][coach]) data.ventes[periode][m][coach] = {};
+                    data.produits.forEach(p => {
+                        if (data.ventes[periode][m][coach][p.nom] === undefined) data.ventes[periode][m][coach][p.nom] = 0;
                     });
                 });
-            }
+            });
+        }
 
-            if (!data.ventes || Object.keys(data.ventes).length === 0) {
-                data.ventes = {};
+        function creerPeriodePrix(periode) {
+            data.prixHistorique ||= {};
+            data.produits.forEach(p => {
+                data.prixHistorique[p.nom] ||= {};
+                data.prixHistorique[p.nom][periode] ||= {};
                 mois.forEach(m => {
-                    data.ventes[m] = {};
-                    data.coachs.forEach(c => {
-                        data.ventes[m][c] = {};
-                        data.produits.forEach(p => {
-                            data.ventes[m][c][p.nom] = 0;
-                        });
-                    });
+                    if (data.prixHistorique[p.nom][periode][m] === undefined) data.prixHistorique[p.nom][periode][m] = p.prixBase;
                 });
+            });
+        }
+
+        function migrerAnciennesDonnees() {
+            data.annees ||= [];
+            const anciennesVentes = data.ventes || {};
+            if (mois.some(m => Object.prototype.hasOwnProperty.call(anciennesVentes, m))) {
+                data.ventes = { [PERIODE_LEGACY]: anciennesVentes };
+                if (!data.annees.includes(PERIODE_LEGACY)) data.annees.push(PERIODE_LEGACY);
             }
 
+            const ancienPrix = data.prixHistorique || {};
+            if (Object.values(ancienPrix).some(x => x && mois.some(m => Object.prototype.hasOwnProperty.call(x, m)))) {
+                data.prixHistorique = {};
+                Object.keys(ancienPrix).forEach(produit => {
+                    data.prixHistorique[produit] = { [PERIODE_LEGACY]: ancienPrix[produit] };
+                });
+                if (!data.annees.includes(PERIODE_LEGACY)) data.annees.push(PERIODE_LEGACY);
+            }
+
+            if (!data.annees.includes(PERIODE_ACTUELLE)) data.annees.push(PERIODE_ACTUELLE);
+            data.annees = [...new Set(data.annees)].sort();
+            data.annees.forEach(a => { creerPeriodeVentes(a); creerPeriodePrix(a); });
+        }
+
+        function initData() {
+            migrerAnciennesDonnees();
             saveData();
+        }
+
+        function getPeriodeSelectionnee() {
+            return document.getElementById('annee-select')?.value || PERIODE_ACTUELLE;
+        }
+
+        function changerAnnee() {
+            const periode = getPeriodeSelectionnee();
+            if (!data.annees.includes(periode)) data.annees.push(periode);
+            creerPeriodeVentes(periode);
+            creerPeriodePrix(periode);
+            saveData();
+            updateView();
+            if (!document.getElementById('dashboard-view').classList.contains('hidden')) updateDashboard();
+            if (!document.getElementById('settings-view').classList.contains('hidden')) updateSettings();
         }
 
         function saveData() {
             localStorage.setItem('appData', JSON.stringify(data));
         }
 
-        function getPrixProduit(produit, mois) {
-            return data.prixHistorique[produit]?.[mois] || data.produits.find(p => p.nom === produit)?.prixBase || 0;
+        function getPrixProduit(produit, moisNom, periode = getPeriodeSelectionnee()) {
+            return data.prixHistorique[produit]?.[periode]?.[moisNom]
+                ?? data.produits.find(p => p.nom === produit)?.prixBase ?? 0;
         }
 
-        function calculerVentesCoach(mois, coach) {
+        function calculerVentesCoach(moisNom, coach, periode = getPeriodeSelectionnee()) {
             let total = 0;
             data.produits.forEach(p => {
-                const quantite = data.ventes[mois]?.[coach]?.[p.nom] || 0;
-                const prix = getPrixProduit(p.nom, mois);
-                total += quantite * prix;
+                const quantite = data.ventes[periode]?.[moisNom]?.[coach]?.[p.nom] || 0;
+                total += quantite * getPrixProduit(p.nom, moisNom, periode);
             });
             return total;
         }
@@ -828,6 +880,12 @@
         }
 
         function populateSelects() {
+            const anneeSelect = document.getElementById('annee-select');
+            if (anneeSelect) {
+                anneeSelect.innerHTML = data.annees.map(a => `<option value="${a}">${a}</option>`).join('');
+                anneeSelect.value = PERIODE_ACTUELLE;
+            }
+
             // Mois select
             const moisSelect = document.getElementById('mois-select');
             moisSelect.innerHTML = mois.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -933,8 +991,8 @@
             const produitsFiltrés = data.produits.filter(p => p.nom.toLowerCase().includes(searchTerm));
 
             const productListHtml = produitsFiltrés.map(produit => {
-                const quantite = data.ventes[moisActuel]?.[coachActuel]?.[produit.nom] || 0;
-                const prix = getPrixProduit(produit.nom, moisActuel);
+                const quantite = data.ventes[periode]?.[moisActuel]?.[coachActuel]?.[produit.nom] || 0;
+                const prix = getPrixProduit(produit.nom, moisActuel, periode);
                 const montant = quantite * prix;
 
                 return `
@@ -960,12 +1018,12 @@
             const moisActuel = document.getElementById('mois-select').value;
             const coachActuel = document.getElementById('coach-select').value;
 
-            const currentQty = data.ventes[moisActuel]?.[coachActuel]?.[produit] || 0;
+            const periode = getPeriodeSelectionnee();
+            const currentQty = data.ventes[periode]?.[moisActuel]?.[coachActuel]?.[produit] || 0;
             const newQty = Math.max(0, currentQty + delta);
 
-            if (!data.ventes[moisActuel]) data.ventes[moisActuel] = {};
-            if (!data.ventes[moisActuel][coachActuel]) data.ventes[moisActuel][coachActuel] = {};
-            data.ventes[moisActuel][coachActuel][produit] = newQty;
+            creerPeriodeVentes(periode);
+            data.ventes[periode][moisActuel][coachActuel][produit] = newQty;
 
             saveData();
             updateView();
@@ -976,10 +1034,10 @@
             const coachActuel = document.getElementById('coach-select').value;
 
             const qty = Math.max(0, parseInt(valeur) || 0);
+            const periode = getPeriodeSelectionnee();
 
-            if (!data.ventes[moisActuel]) data.ventes[moisActuel] = {};
-            if (!data.ventes[moisActuel][coachActuel]) data.ventes[moisActuel][coachActuel] = {};
-            data.ventes[moisActuel][coachActuel][produit] = qty;
+            creerPeriodeVentes(periode);
+            data.ventes[periode][moisActuel][coachActuel][produit] = qty;
 
             saveData();
             updateView();
@@ -1139,10 +1197,12 @@
             }
 
             const monthIndex = mois.indexOf(selectedMonth);
+            const periode = getPeriodeSelectionnee();
+            creerPeriodePrix(periode);
             
             // Mettre à jour le prix pour ce mois et tous les mois suivants
             for (let i = monthIndex; i < mois.length; i++) {
-                data.prixHistorique[produitNom][mois[i]] = newPrice;
+                data.prixHistorique[produitNom][periode][mois[i]] = newPrice;
             }
 
             saveData();
@@ -1176,12 +1236,12 @@
 
             data.coachs.push(name);
 
-            // Initialiser les ventes pour ce coach
-            mois.forEach(m => {
-                if (!data.ventes[m]) data.ventes[m] = {};
-                data.ventes[m][name] = {};
-                data.produits.forEach(p => {
-                    data.ventes[m][name][p.nom] = 0;
+            // Initialiser les ventes pour ce coach dans toutes les périodes
+            data.annees.forEach(periode => {
+                creerPeriodeVentes(periode);
+                mois.forEach(m => {
+                    data.ventes[periode][m][name] = {};
+                    data.produits.forEach(p => data.ventes[periode][m][name][p.nom] = 0);
                 });
             });
 
@@ -1198,11 +1258,11 @@
 
             data.coachs = data.coachs.filter(c => c !== name);
 
-            // Supprimer les ventes associées
-            mois.forEach(m => {
-                if (data.ventes[m] && data.ventes[m][name]) {
-                    delete data.ventes[m][name];
-                }
+            // Supprimer les ventes associées dans toutes les périodes
+            data.annees.forEach(periode => {
+                mois.forEach(m => {
+                    if (data.ventes[periode]?.[m]?.[name]) delete data.ventes[periode][m][name];
+                });
             });
 
             saveData();
@@ -1234,17 +1294,17 @@
 
             // Initialiser l'historique des prix
             data.prixHistorique[name] = {};
-            mois.forEach(m => {
-                data.prixHistorique[name][m] = price;
+            data.annees.forEach(periode => {
+                data.prixHistorique[name][periode] = {};
+                mois.forEach(m => data.prixHistorique[name][periode][m] = price);
             });
 
-            // Initialiser les ventes pour ce produit
-            mois.forEach(m => {
-                data.coachs.forEach(c => {
-                    if (!data.ventes[m]) data.ventes[m] = {};
-                    if (!data.ventes[m][c]) data.ventes[m][c] = {};
-                    data.ventes[m][c][name] = 0;
-                });
+            // Initialiser les ventes pour ce produit dans toutes les périodes
+            data.annees.forEach(periode => {
+                creerPeriodeVentes(periode);
+                mois.forEach(m => data.coachs.forEach(coach => {
+                    data.ventes[periode][m][coach][name] = 0;
+                }));
             });
 
             saveData();
@@ -1263,13 +1323,11 @@
             // Supprimer l'historique des prix
             delete data.prixHistorique[name];
 
-            // Supprimer les ventes associées
-            mois.forEach(m => {
-                data.coachs.forEach(c => {
-                    if (data.ventes[m] && data.ventes[m][c] && data.ventes[m][c][name]) {
-                        delete data.ventes[m][c][name];
-                    }
-                });
+            // Supprimer les ventes associées dans toutes les périodes
+            data.annees.forEach(periode => {
+                mois.forEach(m => data.coachs.forEach(coach => {
+                    if (data.ventes[periode]?.[m]?.[coach]?.[name] !== undefined) delete data.ventes[periode][m][coach][name];
+                }));
             });
 
             saveData();
